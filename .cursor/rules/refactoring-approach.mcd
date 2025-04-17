@@ -1,0 +1,14 @@
+# Refactoring approach
+
+– Apply minimal changes, breaking large refactoring tasks into micro-steps
+– Run tests after each step; create basic tests if none exist
+– Verify results by comparing behavior before and after with identical inputs
+– Focus on one module at a time to maintain isolation and prevent unintended effects
+– Document all changes with clear explanations of what was modified and why
+– Strictly maintain existing functionality - any logic change is considered an error
+– Perform A/B testing to verify stability after refactoring
+– Don't simplify or optimize code without explicit approval
+– Never make assumptions about intended functionality; request confirmation when uncertain
+– After breaking large files into smaller ones REMEMBER TO CHECK IMPORTS first, then either:
+  - DELETE the old large file completely if no other code depends on it
+  - or REPLACE it with a small "bridge file" that re-exports from the new structure if imports exist
