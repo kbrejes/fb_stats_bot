@@ -560,23 +560,6 @@ async def menu_callback(callback: CallbackQuery):
                 parse_mode="HTML"
             )
             
-        elif menu_item == "help":
-            # Show help text with available commands
-            await callback.message.edit_text(
-                "📚 <b>Доступные команды:</b>\n\n"
-                "/start - Приветственное сообщение и информация о боте\n"
-                "/auth - Авторизация в Facebook\n"
-                "/accounts - Список ваших рекламных аккаунтов\n"
-                "/campaigns [id_аккаунта] - Список кампаний для аккаунта\n"
-                "/ads [id_кампании] - Список объявлений для кампании\n"
-                "/stats [id_объекта] [период] - Получение статистики\n"
-                "/export - Экспорт данных в различных форматах\n"
-                "/menu - Показать главное меню\n"
-                "/language - Изменить язык бота\n"
-                "/help - Показать эту справку",
-                parse_mode="HTML"
-            )
-            
         elif menu_item == "language":
             # Show language selection menu
             from src.bot.keyboards import build_language_keyboard

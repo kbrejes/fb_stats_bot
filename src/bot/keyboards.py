@@ -327,11 +327,6 @@ def build_main_menu_keyboard():
     ))
     
     builder.add(InlineKeyboardButton(
-        text="❓ Помощь",
-        callback_data="menu:help"
-    ))
-    
-    builder.add(InlineKeyboardButton(
         text="🌐 Язык / Language",
         callback_data="menu:language"
     ))
