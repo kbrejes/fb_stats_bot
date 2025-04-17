@@ -1,0 +1,32 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to
+
+Технологический стек:
+
+Язык: Python 3.10+ (python3)
+Фреймворки/Библиотеки:
+aiogram (или python-telegram-bot) — Telegram Bot API
+facebook_business — Facebook Marketing API
+pandas — Обработка данных
+sqlalchemy / asyncpg — Работа с БД
+aiohttp / requests — HTTP-запросы
+cryptography — Шифрование
+python-dotenv — Управление конфигурацией
+База данных:
+SQLite (локально)
+PostgreSQL (продакшн)
+Инфраструктура:
+Docker — Контейнеризация
+Heroku / DigitalOcean / AWS — Хостинг
+Sentry (опционально) — Мониторинг ошибок
+API:
+Telegram Bot API
+Facebook Marketing API (v19.0+)
