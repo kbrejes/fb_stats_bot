@@ -283,7 +283,7 @@ async def process_menu_account_callback(callback: CallbackQuery):
         pass
     
     # Import and call account_menu_callback
-    from src.bot.callbacks import account_menu_callback
+    from src.bot.callbacks.account_callbacks import account_menu_callback
     await account_menu_callback(callback)
 
 @router.callback_query(F.data == "menu:campaigns")
