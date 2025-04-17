@@ -127,3 +127,7 @@ python -c "from src.storage.database import init_db; init_db()"
 - Development has DEBUG mode enabled
 - Each environment can have its own Telegram bot token
 - Production should have appropriate callback URLs for Facebook API 
+
+## Пример изменения для демонстрации коммита
+
+Это пример изменения файла для демонстрации коммита в Git. 
