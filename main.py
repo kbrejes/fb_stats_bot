@@ -11,12 +11,15 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config.settings import BOT_TOKEN
 from src.storage.database import init_db
-from src.bot.handlers import router as common_router
 from src.bot.callbacks import callback_router
-from src.bot.account_handlers import router as account_router
-from src.bot.campaign_handlers import router as campaign_router
-from src.bot.ad_handlers import router as ad_router
-from src.bot.handlers import auth_router
+from src.bot.handlers import (
+    common_router, 
+    auth_router, 
+    account_router, 
+    campaign_router, 
+    ad_router,
+    main_router
+)
 from src.utils.logger import setup_logging
 
 # Configure logging
@@ -28,12 +31,13 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
 # Include routers
-dp.include_router(common_router)  # Base router
+dp.include_router(common_router)   # Common commands
 dp.include_router(callback_router)  # Callbacks
-dp.include_router(account_router)  # Account-related handlers
+dp.include_router(account_router)   # Account-related handlers
 dp.include_router(campaign_router)  # Campaign-related handlers
-dp.include_router(ad_router)  # Ad-related handlers
-dp.include_router(auth_router)  # Auth-related handlers
+dp.include_router(ad_router)        # Ad-related handlers
+dp.include_router(auth_router)      # Auth-related handlers
+dp.include_router(main_router)      # Main menu navigation handlers
 
 
 async def main():
