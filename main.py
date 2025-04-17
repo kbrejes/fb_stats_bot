@@ -16,7 +16,7 @@ from src.bot.callbacks import callback_router
 from src.bot.account_handlers import router as account_router
 from src.bot.campaign_handlers import router as campaign_router
 from src.bot.ad_handlers import router as ad_router
-from src.bot.auth_handlers import router as auth_router
+from src.bot.handlers import auth_router
 from src.utils.logger import setup_logging
 
 # Configure logging
