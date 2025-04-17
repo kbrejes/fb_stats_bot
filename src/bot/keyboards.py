@@ -12,10 +12,10 @@ def build_account_keyboard(accounts: List[Dict], add_stats: bool = False):
     
     Args:
         accounts: List of account data.
-        add_stats: Whether to add stats buttons.
+        add_stats: Whether to add stats buttons (parameter kept for compatibility, but no longer used).
         
     Returns:
-        Keyboard with account buttons.
+        Keyboard with account buttons in a single column.
     """
     builder = InlineKeyboardBuilder()
     button_count = 0
@@ -24,23 +24,15 @@ def build_account_keyboard(accounts: List[Dict], add_stats: bool = False):
         account_id = account.get('id')
         account_name = account.get('name', 'Unnamed Account')
         
-        # Trim name if too long
-        if len(account_name) > 30:
-            account_name = account_name[:27] + '...'
+        # Trim name if too long but allow more characters since we have a single column
+        if len(account_name) > 40:
+            account_name = account_name[:37] + '...'
             
         builder.add(InlineKeyboardButton(
             text=account_name,
             callback_data=f"account:{account_id}"
         ))
         button_count += 1
-        
-        # Кнопка статистики аккаунта удалена, вместо нее добавляем кнопку статистики кампаний
-        if add_stats:
-            builder.add(InlineKeyboardButton(
-                text="📊 Статистика кампаний",
-                callback_data=f"account_campaigns_stats:{account_id}"
-            ))
-            button_count += 1
     
     # Добавляем кнопку для возврата в главное меню
     builder.add(InlineKeyboardButton(
@@ -49,15 +41,8 @@ def build_account_keyboard(accounts: List[Dict], add_stats: bool = False):
     ))
     button_count += 1
     
-    # Добавляем пустую кнопку для сохранения парности
-    if button_count % 2 != 0:
-        builder.add(InlineKeyboardButton(
-            text=" ", 
-            callback_data="empty:action"
-        ))
-    
-    # Build grid - всегда по 2 кнопкам в ряду
-    builder.adjust(2)
+    # Build grid - 1 кнопка в ряду для лучшей читаемости
+    builder.adjust(1)
     
     return builder.as_markup()
 

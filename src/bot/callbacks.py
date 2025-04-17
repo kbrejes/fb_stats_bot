@@ -853,14 +853,8 @@ async def account_menu_callback(callback: CallbackQuery):
     
     # Campaign stats button - с укороченным названием
     builder.add(InlineKeyboardButton(
-        text="📊 Статистика",
+        text="📊 Статистика кампаний",
         callback_data=f"account_campaigns_stats:{account_id}"
-    ))
-    
-    # Account stats button
-    builder.add(InlineKeyboardButton(
-        text=get_text("view_account_stats", lang),
-        callback_data=f"account_stats:{account_id}"
     ))
     
     # Back to accounts list button
