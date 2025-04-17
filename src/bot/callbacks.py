@@ -619,73 +619,39 @@ async def menu_callback(callback: CallbackQuery):
 @callback_router.callback_query(F.data.startswith("account_stats:"))
 async def account_stats_callback(callback: CallbackQuery):
     """
-    Handle account stats button presses.
+    Handle account stats button presses - DISABLED.
+    This callback handler has been disabled to remove the account statistics feature.
+    The stats_callback will still work when called with object_type="account", but 
+    direct button access has been removed.
+    
     Callback data format: account_stats:account_id:account_name
     """
     try:
-        await callback.answer()
+        await callback.answer("Эта функция отключена", show_alert=True)
     except Exception as e:
         logger.warning(f"Error answering account_stats callback: {str(e)}")
-        # Continue even if we can't answer the callback
-        pass
+
+    # Создаем клавиатуру для возврата
+    builder = InlineKeyboardBuilder()
     
-    # Get the user ID
-    user_id = callback.from_user.id
+    builder.add(InlineKeyboardButton(
+        text="↩️ Назад к аккаунтам",
+        callback_data="menu:accounts"
+    ))
     
-    # Fix for the issue where bot ID might be used
-    if user_id == 8113924050 or str(user_id) == "8113924050":
-        from src.storage.database import get_session
-        from src.storage.models import User
-        
-        # Try to find a valid user
-        session = get_session()
-        try:
-            user = session.query(User).filter(User.telegram_id != 8113924050).first()
-            if user:
-                print(f"DEBUG: Replacing bot ID with user ID in account_stats callback: {user.telegram_id}")
-                user_id = user.telegram_id
-        except Exception as e:
-            print(f"DEBUG: Error finding alternative user in account_stats callback: {str(e)}")
-        finally:
-            session.close()
+    builder.add(InlineKeyboardButton(
+        text="🏠 Главное меню",
+        callback_data="menu:main"
+    ))
     
-    parts = callback.data.split(":")
-    if len(parts) < 2:
-        await callback.message.edit_text("❌ Invalid account stats request format.")
-        return
+    # Set up 2-button grid
+    builder.adjust(2)
     
-    account_id = parts[1]
-    account_name = parts[2] if len(parts) > 2 else account_id
-    
-    # Import the date preset keyboard
-    from src.bot.keyboards import build_date_preset_keyboard
-    
-    # Улучшенное отображение имени аккаунта
-    display_name = account_name if account_name != account_id else account_id
-    
-    # Ограничиваем длину имени для отображения, если оно слишком длинное
-    if len(display_name) > 40:
-        display_name = display_name[:37] + "..."
-    
-    # Show date selection keyboard
-    try:
-        await callback.message.edit_text(
-            f"📅 Выберите период для статистики аккаунта <b>{display_name}</b>:",
-            parse_mode="HTML",
-            reply_markup=build_date_preset_keyboard(account_id, "account", account_name)
-        )
-    except TelegramBadRequest as e:
-        # Message was deleted or can't be edited
-        logger.warning(f"Error showing date selection keyboard: {str(e)}")
-        # Try without HTML
-        try:
-            await callback.message.edit_text(
-                f"📅 Выберите период для статистики аккаунта {display_name}:",
-                reply_markup=build_date_preset_keyboard(account_id, "account", account_name)
-            )
-        except Exception as text_error:
-            logger.error(f"Failed to show date selection keyboard: {str(text_error)}")
-            await callback.message.edit_text("❌ Не удалось отобразить выбор периода.")
+    await callback.message.edit_text(
+        "⚠️ Функция статистики аккаунта отключена. Пожалуйста, используйте статистику кампаний.",
+        reply_markup=builder.as_markup()
+    )
+    return
 
 @callback_router.callback_query(F.data.startswith("campaign_stats:"))
 async def campaign_stats_callback(callback: CallbackQuery):

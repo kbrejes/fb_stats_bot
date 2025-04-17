@@ -34,11 +34,11 @@ def build_account_keyboard(accounts: List[Dict], add_stats: bool = False):
         ))
         button_count += 1
         
-        # Add stats button if requested
+        # Кнопка статистики аккаунта удалена, вместо нее добавляем кнопку статистики кампаний
         if add_stats:
             builder.add(InlineKeyboardButton(
-                text="📊 Статистика",
-                callback_data=f"account_stats:{account_id}:{account_name}"
+                text="📊 Статистика кампаний",
+                callback_data=f"account_campaigns_stats:{account_id}"
             ))
             button_count += 1
     
