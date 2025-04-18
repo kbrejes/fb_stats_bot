@@ -12,6 +12,9 @@ from src.storage.models import User
 
 logger = logging.getLogger(__name__)
 
+# Прототип для поддерживаемых языков, будет обновлен после инициализации менеджера
+SUPPORTED_LANGUAGES = ["ru", "en"]
+
 class LocalizationManager:
     """
     Class that manages translations and language settings.
@@ -248,6 +251,9 @@ class LocalizationManager:
 
 # Create global instance
 _localization_manager = LocalizationManager()
+
+# Update SUPPORTED_LANGUAGES with actual available languages
+SUPPORTED_LANGUAGES = _localization_manager.get_available_languages()
 
 # Convenience functions
 def get_text(key: str, lang: str = None, category: str = None, 

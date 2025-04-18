@@ -12,7 +12,7 @@ from src.api.facebook import FacebookAdsClient
 from src.storage.database import get_session
 from src.storage.models import User
 from src.utils.message_formatter import format_insights, format_campaign_table
-from src.utils.languages import get_text, get_language, fix_user_id
+from src.utils.localization import get_text, get_language, fix_user_id, _
 from src.bot.keyboards import build_date_preset_keyboard
 from src.utils.error_handlers import handle_exceptions, api_error_handler
 
@@ -68,7 +68,7 @@ async def stats_callback(callback: CallbackQuery):
     
     # Show loading message
     try:
-        await callback.message.edit_text(get_text("loading_stats", lang), parse_mode="HTML")
+        await callback.message.edit_text(get_text("loading_stats", lang=lang, category="stats"), parse_mode="HTML")
     except TelegramBadRequest:
         # Message was deleted or can't be edited
         return
@@ -111,13 +111,13 @@ async def stats_callback(callback: CallbackQuery):
                 button_count = 0
                 
                 builder.add(InlineKeyboardButton(
-                    text=get_text("back_to_account", lang),
+                    text=get_text("back_to_account", lang=lang, category="menu"),
                     callback_data=f"menu:account:{object_id}"
                 ))
                 button_count += 1
                 
                 builder.add(InlineKeyboardButton(
-                    text=get_text("main_menu", lang),
+                    text=get_text("main_menu", lang=lang, category="menu"),
                     callback_data="menu:main"
                 ))
                 button_count += 1
@@ -133,7 +133,7 @@ async def stats_callback(callback: CallbackQuery):
                 builder.adjust(2)
                 
                 await callback.message.edit_text(
-                    get_text("no_campaigns_found", lang),
+                    get_text("no_campaigns_found", lang=lang, category="stats"),
                     reply_markup=builder.as_markup()
                 )
                 return
@@ -173,13 +173,13 @@ async def stats_callback(callback: CallbackQuery):
             button_count = 0
             
             builder.add(InlineKeyboardButton(
-                text=get_text("back_to_accounts", lang),
+                text=get_text("back_to_accounts", lang=lang, category="menu"),
                 callback_data="menu:accounts"
             ))
             button_count += 1
             
             builder.add(InlineKeyboardButton(
-                text=get_text("main_menu", lang),
+                text=get_text("main_menu", lang=lang, category="menu"),
                 callback_data="menu:main"
             ))
             button_count += 1
@@ -195,7 +195,8 @@ async def stats_callback(callback: CallbackQuery):
             builder.adjust(2)
             
             await callback.message.edit_text(
-                get_text("no_stats_found", lang, object_type=get_text(object_type.replace('_campaigns', ''), lang)),
+                get_text("no_stats_found", lang=lang, category="stats", 
+                        object_type=get_text(object_type.replace('_campaigns', ''), lang=lang, category="common")),
                 reply_markup=builder.as_markup()
             )
             return
@@ -214,14 +215,23 @@ async def stats_callback(callback: CallbackQuery):
         else:
             formatted_text = format_insights(insights, object_type, date_preset, user_id)
         
-        # Replace the header with object name if needed
-        if object_type != "account_campaigns":
-            obj_type_display = get_text(object_type, lang).capitalize()
-            if formatted_text.startswith(f"<b>{get_text('insights_for', lang, type=obj_type_display, name='')}</b>"):
-                # Replace header with object name included
-                old_header = f"<b>{get_text('insights_for', lang, type=obj_type_display, name='')}</b>\n"
-                new_header = f"<b>{get_text('insights_for', lang, type=obj_type_display, name=display_name)}</b>\n"
-                formatted_text = formatted_text.replace(old_header, new_header)
+        # Try to improve message with object name if available
+        if object_name and formatted_text:
+            try:
+                # Formatting insights with display name
+                display_name = object_name
+                if len(display_name) > 20:
+                    display_name = display_name[:17] + "..."
+                
+                # Fix header with object name
+                obj_type_display = get_text(object_type, lang=lang, category="common").capitalize()
+                if formatted_text.startswith(f"<b>{get_text('insights_for', lang=lang, category='stats', type=obj_type_display, name='')}</b>"):
+                    # Get beginning of the string up to the first </b> tag, then append new text after
+                    old_header = f"<b>{get_text('insights_for', lang=lang, category='stats', type=obj_type_display, name='')}</b>\n"
+                    new_header = f"<b>{get_text('insights_for', lang=lang, category='stats', type=obj_type_display, name=display_name)}</b>\n"
+                    formatted_text = formatted_text.replace(old_header, new_header)
+            except Exception as e:
+                logger.error(f"Error formatting object name: {str(e)}")
         
         # Create navigation buttons
         builder = InlineKeyboardBuilder()
@@ -230,19 +240,19 @@ async def stats_callback(callback: CallbackQuery):
         # Back buttons based on object type
         if object_type == "account":
             builder.add(InlineKeyboardButton(
-                text=get_text("back_to_accounts", lang),
+                text=get_text("back_to_accounts", lang=lang, category="menu"),
                 callback_data="menu:accounts"
             ))
         elif object_type == "campaign":
             account_id = object_id.split('_')[0] if '_' in object_id else None
             if account_id:
                 builder.add(InlineKeyboardButton(
-                    text=get_text("back_to_campaigns", lang),
+                    text=get_text("back_to_campaigns", lang=lang),
                     callback_data=f"menu:campaigns:{account_id}"
                 ))
             else:
                 builder.add(InlineKeyboardButton(
-                    text=get_text("back_to_accounts", lang),
+                    text=get_text("back_to_accounts", lang=lang, category="menu"),
                     callback_data="menu:accounts"
                 ))
         elif object_type == "account_campaigns":
@@ -252,7 +262,7 @@ async def stats_callback(callback: CallbackQuery):
             ))
         else:
             builder.add(InlineKeyboardButton(
-                text=get_text("back_to_accounts", lang),
+                text=get_text("back_to_accounts", lang=lang, category="menu"),
                 callback_data="menu:accounts"
             ))
         
@@ -260,7 +270,7 @@ async def stats_callback(callback: CallbackQuery):
         
         # Main menu button
         builder.add(InlineKeyboardButton(
-            text=get_text("main_menu", lang),
+            text=get_text("main_menu", lang=lang, category="menu"),
             callback_data="menu:main"
         ))
         button_count += 1
@@ -290,13 +300,13 @@ async def stats_callback(callback: CallbackQuery):
         button_count = 0
         
         builder.add(InlineKeyboardButton(
-            text=get_text("back_to_accounts", lang),
+            text=get_text("back_to_accounts", lang=lang, category="menu"),
             callback_data="menu:accounts"
         ))
         button_count += 1
         
         builder.add(InlineKeyboardButton(
-            text=get_text("main_menu", lang),
+            text=get_text("main_menu", lang=lang, category="menu"),
             callback_data="menu:main"
         ))
         button_count += 1
@@ -311,6 +321,6 @@ async def stats_callback(callback: CallbackQuery):
         builder.adjust(2)
         
         await callback.message.edit_text(
-            f"❌ {get_text('error_fetching_stats', lang)}: {str(e)}",
+            f"❌ {get_text('error_fetching_stats', lang=lang, category='errors')}: {str(e)}",
             reply_markup=builder.as_markup()
         ) 

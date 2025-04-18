@@ -8,7 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
 from src.api.facebook import FacebookAdsClient
-from src.utils.languages import get_text, get_language, fix_user_id
+from src.utils.localization import get_text, get_language, fix_user_id, _
 from src.bot.keyboards import build_account_keyboard, build_date_preset_keyboard
 from src.bot.filters import AccountCallbackFilter, DatePresetCallbackFilter
 from src.data.processor import DataProcessor
@@ -75,13 +75,13 @@ async def account_menu_callback(callback: CallbackQuery):
     
     # Back to accounts list button
     builder.add(InlineKeyboardButton(
-        text=get_text("back_to_accounts", lang),
+        text=get_text("back_to_accounts", lang=lang, category="menu"),
         callback_data="menu:accounts"
     ))
     
     # Main menu button
     builder.add(InlineKeyboardButton(
-        text=get_text("main_menu", lang),
+        text=get_text("main_menu", lang=lang, category="menu"),
         callback_data="menu:main"
     ))
     
@@ -102,7 +102,7 @@ async def account_menu_callback(callback: CallbackQuery):
     
     # Send the menu
     await callback.message.edit_text(
-        f"{get_text('account_menu', lang)}: <b>{account_name}</b>",
+        f"{get_text('account_menu', lang=lang, category='menu')}: <b>{account_name}</b>",
         reply_markup=builder.as_markup(),
         parse_mode="HTML"
     )
@@ -200,15 +200,11 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
     
     account_id = parts[1]
     
-    # Show loading message
-    try:
-        await callback.message.edit_text(
-            get_text("loading_stats", lang),
-            parse_mode="HTML"
-        )
-    except TelegramBadRequest:
-        # Message was deleted or can't be edited
-        return
+    # Notify about loading
+    await callback.message.edit_text(
+        get_text("loading_stats", lang=lang, category="stats"),
+        parse_mode="HTML"
+    )
     
     client = FacebookAdsClient(user_id)
     
@@ -226,7 +222,7 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
             ))
             
             builder.add(InlineKeyboardButton(
-                text=get_text("main_menu", lang),
+                text=get_text("main_menu", lang=lang, category="menu"),
                 callback_data="menu:main"
             ))
             
@@ -234,7 +230,7 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
             builder.adjust(2)
             
             await callback.message.edit_text(
-                get_text("no_campaigns_found", lang),
+                get_text("no_campaigns_found", lang=lang, category="stats"),
                 reply_markup=builder.as_markup()
             )
             return
@@ -290,7 +286,7 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
         ))
         
         builder.add(InlineKeyboardButton(
-            text=get_text("main_menu", lang),
+            text=get_text("main_menu", lang=lang, category="menu"),
             callback_data="menu:main"
         ))
         
@@ -298,7 +294,7 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
         builder.adjust(2)
         
         await callback.message.edit_text(
-            f"❌ {get_text('error_fetching_campaigns', lang)}: {str(e)}",
+            f"❌ {get_text('error_fetching_campaigns', lang=lang, category='errors')}: {str(e)}",
             reply_markup=builder.as_markup()
         )
 

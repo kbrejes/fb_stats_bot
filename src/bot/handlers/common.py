@@ -12,7 +12,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 
 from src.bot.keyboards import build_main_menu_keyboard, build_language_keyboard
-from src.utils.languages import set_language, get_language, SUPPORTED_LANGUAGES
+from src.utils.localization import get_text, get_language, set_language, _, SUPPORTED_LANGUAGES
 from src.utils.bot_helpers import fix_user_id
 from src.storage.database import get_session
 from src.storage.models import User

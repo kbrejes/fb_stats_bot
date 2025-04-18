@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
-from src.utils.languages import get_text, get_language, fix_user_id
+from src.utils.localization import get_text, get_language, fix_user_id, _
 from src.api.facebook import FacebookAdsClient
 from src.utils.error_handlers import handle_exceptions, api_error_handler
 
@@ -135,7 +135,6 @@ async def menu_callback(callback: CallbackQuery):
         elif menu_item == "language":
             # Show language selection menu
             from src.bot.keyboards import build_language_keyboard
-            from src.utils.languages import get_language
             
             # Get the user's current language
             current_language = get_language(user_id)

@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional
 import json
 
 from src.utils.logger import get_logger
-from src.utils.languages import get_text, get_language
+from src.utils.localization import get_text, get_language, _
 
 logger = get_logger(__name__)
 
@@ -28,15 +28,15 @@ def format_insights(insights: List[Dict[str, Any]], object_type: str, date_prese
         lang = get_language(user_id)
     
     if not insights:
-        return f"<b>{get_text('no_stats_found', lang, object_type=get_text(object_type, lang))}</b>"
+        return f"<b>{get_text('no_stats_found', lang=lang, category='stats', object_type=get_text(object_type, lang=lang, category='common'))}</b>"
     
     # Get date label based on user's language
-    date_label = get_text(date_preset, lang)
+    date_label = get_text(date_preset, lang=lang, category='stats')
     
     # Start building the formatted message
-    obj_type_display = get_text(object_type, lang)
-    message = f"<b>{get_text('insights_for', lang, type=obj_type_display.capitalize(), name='')}</b>\n"
-    message += f"<b>{get_text('period', lang)}:</b> {date_label}\n\n"
+    obj_type_display = get_text(object_type, lang=lang, category='common')
+    message = f"<b>{get_text('insights_for', lang=lang, category='stats', type=obj_type_display.capitalize(), name='')}</b>\n"
+    message += f"<b>{get_text('period', lang=lang, category='stats')}:</b> {date_label}\n\n"
     
     # Helper function to format currency values
     def format_currency(value, currency="USD"):
@@ -59,23 +59,23 @@ def format_insights(insights: List[Dict[str, Any]], object_type: str, date_prese
     
     currency = insights[0].get('currency', 'USD') if insights else 'USD'
     
-    message += f"<b>{get_text('summary', lang)}:</b>\n"
-    message += f"• <b>{get_text('impressions', lang)}:</b> {int(total_impressions):,}\n"
-    message += f"• <b>{get_text('clicks', lang)}:</b> {int(total_clicks):,}\n"
-    message += f"• <b>{get_text('reach', lang)}:</b> {int(total_reach):,}\n"
-    message += f"• <b>{get_text('spend', lang)}:</b> {format_currency(total_spend, currency)}\n"
+    message += f"<b>{get_text('summary', lang=lang, category='stats')}:</b>\n"
+    message += f"• <b>{get_text('impressions', lang=lang, category='stats')}:</b> {int(total_impressions):,}\n"
+    message += f"• <b>{get_text('clicks', lang=lang, category='stats')}:</b> {int(total_clicks):,}\n"
+    message += f"• <b>{get_text('reach', lang=lang, category='stats')}:</b> {int(total_reach):,}\n"
+    message += f"• <b>{get_text('spend', lang=lang, category='stats')}:</b> {format_currency(total_spend, currency)}\n"
     
     if total_impressions > 0:
         ctr = (total_clicks / total_impressions) * 100
-        message += f"• <b>{get_text('ctr', lang)}:</b> {ctr:.2f}%\n"
+        message += f"• <b>{get_text('ctr', lang=lang, category='stats')}:</b> {ctr:.2f}%\n"
         
     if total_impressions > 0:
         cpm = (total_spend / total_impressions) * 1000
-        message += f"• <b>{get_text('cpm', lang)}:</b> {format_currency(cpm, currency)}\n"
+        message += f"• <b>{get_text('cpm', lang=lang, category='stats')}:</b> {format_currency(cpm, currency)}\n"
         
     if total_clicks > 0:
         cpc = total_spend / total_clicks
-        message += f"• <b>{get_text('cpc', lang)}:</b> {format_currency(cpc, currency)}\n"
+        message += f"• <b>{get_text('cpc', lang=lang, category='stats')}:</b> {format_currency(cpc, currency)}\n"
     
     # Check for conversions data
     conversion_data = False
@@ -85,7 +85,7 @@ def format_insights(insights: List[Dict[str, Any]], object_type: str, date_prese
             break
             
     if conversion_data:
-        message += f"\n<b>{get_text('conversion_data', lang)}:</b>\n"
+        message += f"\n<b>{get_text('conversion_data', lang=lang, category='stats')}:</b>\n"
         
         # Extract conversion data
         action_types = {}
@@ -143,7 +143,7 @@ def format_insights(insights: List[Dict[str, Any]], object_type: str, date_prese
         
         # Format custom conversions first if available
         if custom_conversions:
-            message += f"\n<b>{get_text('custom_conversions', lang)}:</b>\n"
+            message += f"\n<b>{get_text('custom_conversions', lang=lang, category='stats')}:</b>\n"
             for custom_name, value in custom_conversions.items():
                 full_type = f"offsite_conversion.fb_pixel_custom.{custom_name}"
                 message += f"• <b>{custom_name}:</b> {int(value):,}"
@@ -151,25 +151,25 @@ def format_insights(insights: List[Dict[str, Any]], object_type: str, date_prese
                 # Add cost if known
                 if full_type in cost_per_action:
                     cost = cost_per_action[full_type]
-                    message += f" (<b>{get_text('cost', lang)}:</b> {format_currency(cost, currency)})"
+                    message += f" (<b>{get_text('cost', lang=lang, category='stats')}:</b> {format_currency(cost, currency)})"
                 elif "offsite_conversion.fb_pixel_custom" in cost_per_action:
                     # Use general cost if specific one not available
                     cost = cost_per_action["offsite_conversion.fb_pixel_custom"]
-                    message += f" (<b>{get_text('est_cost', lang)}:</b> {format_currency(cost, currency)})"
+                    message += f" (<b>{get_text('est_cost', lang=lang, category='stats')}:</b> {format_currency(cost, currency)})"
                 
                 message += "\n"
         
         # Then main conversions
-        message += f"\n<b>{get_text('all_conversions', lang)}:</b>\n"
+        message += f"\n<b>{get_text('all_conversions', lang=lang, category='stats')}:</b>\n"
         
         # Dictionary for nicer conversion type names
         conversion_labels = {
-            'link_click': get_text('link_clicks', lang),
-            'landing_page_view': get_text('landing_page_view', lang),
-            'lead': get_text('lead', lang),
-            'purchase': get_text('purchase', lang),
-            'offsite_conversion.fb_pixel_lead': get_text('offsite_conversion.fb_pixel_lead', lang),
-            'offsite_conversion.fb_pixel_purchase': get_text('offsite_conversion.fb_pixel_purchase', lang)
+            'link_click': get_text('link_clicks', lang=lang, category='stats'),
+            'landing_page_view': get_text('landing_page_view', lang=lang, category='stats'),
+            'lead': get_text('lead', lang=lang, category='stats'),
+            'purchase': get_text('purchase', lang=lang, category='stats'),
+            'offsite_conversion.fb_pixel_lead': get_text('offsite_conversion.fb_pixel_lead', lang=lang, category='stats'),
+            'offsite_conversion.fb_pixel_purchase': get_text('offsite_conversion.fb_pixel_purchase', lang=lang, category='stats')
         }
         
         # List of important conversions to show first
@@ -189,7 +189,7 @@ def format_insights(insights: List[Dict[str, Any]], object_type: str, date_prese
                 # Add cost if known
                 if action_type in cost_per_action:
                     cost = cost_per_action[action_type]
-                    message += f" (<b>{get_text('cost', lang)}:</b> {format_currency(cost, currency)})"
+                    message += f" (<b>{get_text('cost', lang=lang, category='stats')}:</b> {format_currency(cost, currency)})"
                 
                 message += "\n"
                 
@@ -216,12 +216,12 @@ def format_insights(insights: List[Dict[str, Any]], object_type: str, date_prese
             # Add cost if known
             if action_type in cost_per_action:
                 cost = cost_per_action[action_type]
-                message += f" (<b>{get_text('cost', lang)}:</b> {format_currency(cost, currency)})"
+                message += f" (<b>{get_text('cost', lang=lang, category='stats')}:</b> {format_currency(cost, currency)})"
             
             message += "\n"
     
     # Add export note
-    message += f"\n<i>{get_text('export_note', lang)}</i>"
+    message += f"\n<i>{get_text('export_note', lang=lang, category='stats')}</i>"
     
     return message
 
@@ -246,14 +246,14 @@ def format_campaign_table(campaigns: List[Dict], insights: List[Dict], date_pres
         lang = get_language(user_id)
     
     if not campaigns or not insights:
-        return f"<b>{get_text('no_campaigns_found', lang)}</b>"
+        return f"<b>{get_text('no_campaigns_found', lang=lang, category='stats')}</b>"
     
     # Get date label
-    date_label = get_text(date_preset, lang)
+    date_label = get_text(date_preset, lang=lang, category='stats')
     
     # Start building the message
-    message = f"<b>Статистика кампаний</b>\n"
-    message += f"<b>Период:</b> {date_label}\n\n"
+    message = f"<b>{get_text('stats_for_campaigns', lang=lang, category='stats')}</b>\n"
+    message += f"<b>{get_text('period', lang=lang, category='stats')}:</b> {date_label}\n\n"
     
     # Helper function to format currency values
     def format_currency(value, currency="USD"):
@@ -552,7 +552,7 @@ def format_campaign_table(campaigns: List[Dict], insights: List[Dict], date_pres
     
     # Если не нашли активных кампаний
     if active_campaigns_count == 0:
-        return f"<b>Статистика кампаний</b>\n<b>Период:</b> {date_label}\n\n<i>Нет активных кампаний или кампаний с активностью за выбранный период.</i>"
+        return f"<b>{get_text('stats_for_campaigns', lang=lang, category='stats')}</b>\n<b>{get_text('period', lang=lang, category='stats')}:</b> {date_label}\n\n<i>{get_text('no_active_campaigns_or_activity', lang=lang, category='stats')}</i>"
     
     # Рассчитываем средневзвешенные значения
     weighted_frequency = sum(f * w for f, w in weighted_frequency_data) / sum(w for _, w in weighted_frequency_data) if weighted_frequency_data else 0
@@ -564,14 +564,14 @@ def format_campaign_table(campaigns: List[Dict], insights: List[Dict], date_pres
     most_common_conversion_type = max(conversion_type_counts.items(), key=lambda x: x[1])[0] if conversion_type_counts else "Нет"
     
     # Создаем общий блок со статистикой
-    summary_block = "<b>Общая статистика:</b>\n"
-    summary_block += f"<b>Конверсии:</b> {int(total_all_conversions)}\n"
-    summary_block += f"<b>Охват:</b> {int(total_all_reach):,}".replace(',', ' ') + "\n"
-    summary_block += f"<b>Частота:</b> {weighted_frequency:.2f}\n"
-    summary_block += f"<b>Цена конверсии:</b> {format_currency(weighted_cost_per_conversion)} USD (Тип: {most_common_conversion_type})\n"
-    summary_block += f"<b>Расход:</b> {format_currency(total_all_spend)} USD\n"
-    summary_block += f"<b>CPM:</b> {format_currency(weighted_cpm)} USD\n"
-    summary_block += f"<b>CTR:</b> {weighted_ctr:.2f}%\n"
+    summary_block = f"<b>{get_text('total_stats', lang=lang, category='stats')}</b>\n"
+    summary_block += f"<b>{get_text('conversions', lang=lang, category='stats')}:</b> {int(total_all_conversions)}\n"
+    summary_block += f"<b>{get_text('reach', lang=lang, category='stats')}:</b> {int(total_all_reach):,}".replace(',', ' ') + "\n"
+    summary_block += f"<b>{get_text('frequency', lang=lang, category='stats')}:</b> {weighted_frequency:.2f}\n"
+    summary_block += f"<b>{get_text('cost_per_conversion', lang=lang, category='stats')}:</b> {format_currency(weighted_cost_per_conversion)} USD (Тип: {most_common_conversion_type})\n"
+    summary_block += f"<b>{get_text('spend', lang=lang, category='stats')}:</b> {format_currency(total_all_spend)} USD\n"
+    summary_block += f"<b>{get_text('cpm', lang=lang, category='stats')}:</b> {format_currency(weighted_cpm)} USD\n"
+    summary_block += f"<b>{get_text('ctr', lang=lang, category='stats')}:</b> {weighted_ctr:.2f}%\n"
     
     # Добавляем общую статистику в начало сообщения
     message += summary_block + "\n"
@@ -580,19 +580,19 @@ def format_campaign_table(campaigns: List[Dict], insights: List[Dict], date_pres
     message += "<b>▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬</b>\n\n"
     
     # Добавляем заголовок "Статистика по кампаниям"
-    message += "<b>Статистика по кампаниям:</b>\n\n"
+    message += f"<b>{get_text('stats_for_campaigns', lang=lang, category='stats')}</b>\n\n"
     
     # Теперь форматируем блоки для каждой кампании
     for campaign_data in campaigns_data:
         campaign_text = f"<b>{campaign_data['name']}</b>\n"
-        campaign_text += f"<b>Статус:</b> {campaign_data['status']}\n"
-        campaign_text += f"<b>Конверсии:</b> {campaign_data['results_str']}\n"
-        campaign_text += f"<b>Охват:</b> {campaign_data['reach_str']}\n"
-        campaign_text += f"<b>Частота:</b> {campaign_data['frequency_str']}\n"
-        campaign_text += f"<b>Цена конверсии:</b> {campaign_data['cost_str']} (Тип: {campaign_data['used_conversion_type']})\n"
-        campaign_text += f"<b>Расход:</b> {campaign_data['spend_str']}\n"
-        campaign_text += f"<b>CPM:</b> {campaign_data['cpm_str']}\n"
-        campaign_text += f"<b>CTR:</b> {campaign_data['ctr_str']}\n"
+        campaign_text += f"<b>{get_text('status', lang=lang, category='stats')}:</b> {campaign_data['status']}\n"
+        campaign_text += f"<b>{get_text('conversions', lang=lang, category='stats')}:</b> {campaign_data['results_str']}\n"
+        campaign_text += f"<b>{get_text('reach', lang=lang, category='stats')}:</b> {campaign_data['reach_str']}\n"
+        campaign_text += f"<b>{get_text('frequency', lang=lang, category='stats')}:</b> {campaign_data['frequency_str']}\n"
+        campaign_text += f"<b>{get_text('cost_per_conversion', lang=lang, category='stats')}:</b> {campaign_data['cost_str']} (Тип: {campaign_data['used_conversion_type']})\n"
+        campaign_text += f"<b>{get_text('spend', lang=lang, category='stats')}:</b> {campaign_data['spend_str']}\n"
+        campaign_text += f"<b>{get_text('cpm', lang=lang, category='stats')}:</b> {campaign_data['cpm_str']}\n"
+        campaign_text += f"<b>{get_text('ctr', lang=lang, category='stats')}:</b> {campaign_data['ctr_str']}\n"
         
         campaign_blocks.append(campaign_text)
     
