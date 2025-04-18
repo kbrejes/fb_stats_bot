@@ -24,7 +24,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 @router.message(Command("campaigns"))
-@handle_exceptions
+@handle_exceptions(notify_user=True, log_error=True)
 async def cmd_campaigns(message: Message, command: CommandObject):
     """
     Handle the /campaigns command.
@@ -121,7 +121,7 @@ async def cmd_campaigns(message: Message, command: CommandObject):
 
 
 @router.callback_query(F.data.startswith("campaign:"))
-@handle_exceptions
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_campaign_callback(callback: CallbackQuery):
     """
     Handle campaign selection callback.
