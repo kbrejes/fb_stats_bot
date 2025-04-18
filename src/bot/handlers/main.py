@@ -15,12 +15,14 @@ from src.bot.keyboards import build_main_menu_keyboard
 from src.utils.bot_helpers import fix_user_id
 from src.storage.database import get_session
 from src.storage.models import User
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Create a router for main handlers
 router = Router()
 logger = logging.getLogger(__name__)
 
 @router.callback_query(F.data.startswith("menu:main"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_menu_main_callback(callback: CallbackQuery):
     """
     Handle main menu callback.
@@ -44,6 +46,7 @@ async def process_menu_main_callback(callback: CallbackQuery):
         logger.error(f"Error updating message in menu main: {str(e)}")
 
 @router.callback_query(F.data.startswith("menu:campaign:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_menu_campaign_callback(callback: CallbackQuery):
     """
     Handle campaign menu callback - this is the handler for "Back to campaign" button.
@@ -68,6 +71,7 @@ async def process_menu_campaign_callback(callback: CallbackQuery):
     await cmd_ads(callback.message, FakeCommandObject(campaign_id))
 
 @router.callback_query(F.data.startswith("menu:account:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_menu_account_callback(callback: CallbackQuery):
     """
     Handle account menu callback - this is the handler for "Back to account" button.
@@ -92,6 +96,7 @@ async def process_menu_account_callback(callback: CallbackQuery):
     await cmd_campaigns(callback.message, FakeCommandObject(account_id))
 
 @router.callback_query(F.data == "menu:campaigns")
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_menu_campaigns_callback(callback: CallbackQuery):
     """
     Handle campaigns menu callback - this is the handler for "Campaigns" button.
@@ -145,6 +150,7 @@ async def process_menu_campaigns_callback(callback: CallbackQuery):
     await cmd_campaigns(callback.message, FakeCommandObject(account_id))
 
 @router.callback_query(F.data == "menu:accounts")
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_menu_accounts_callback(callback: CallbackQuery):
     """
     Handle accounts menu callback - this is the handler for "Accounts" button.
@@ -162,6 +168,7 @@ async def process_menu_accounts_callback(callback: CallbackQuery):
     await cmd_accounts(callback.message)
 
 @router.callback_query(F.data == "menu:help")
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_menu_help_callback(callback: CallbackQuery):
     """
     Handle help menu callback - this is the handler for "Help" button.
@@ -198,6 +205,7 @@ async def process_menu_help_callback(callback: CallbackQuery):
         logger.error(f"Error updating message in menu help: {str(e)}")
 
 @router.callback_query(F.data.startswith("empty:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_empty_callback(callback: CallbackQuery):
     """
     Handle empty callback - This is used for placeholder buttons.

@@ -9,6 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 
 from src.utils.languages import get_text, get_language, fix_user_id
 from src.api.facebook import FacebookAdsClient
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 menu_router = Router()
 
 @menu_router.callback_query(F.data.startswith("menu:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def menu_callback(callback: CallbackQuery):
     """
     Handle menu selection callbacks.
@@ -113,61 +115,10 @@ async def menu_callback(callback: CallbackQuery):
             # Get the chat ID where we need to send the message
             chat_id = callback.message.chat.id
             
-            # Since we can't rely on message.answer or properly create a Message object,
-            # we'll implement the account listing logic directly here
-            
-            # Show loading message
-            try:
-                # Send a new loading message using the callback's bot property
-                loading_message = await callback.bot.send_message(
-                    chat_id,
-                    "🔄 Загружаем список ваших рекламных аккаунтов..."
-                )
-                
-                # Get accounts directly
-                fb_client = FacebookAdsClient(user_id)
-                accounts = await fb_client.get_ad_accounts()
-                
-                if not accounts:
-                    await loading_message.edit_text(
-                        "⚠️ У вас нет доступных рекламных аккаунтов.\n"
-                        "Убедитесь, что ваша учетная запись Facebook имеет доступ к рекламным аккаунтам."
-                    )
-                    return
-                
-                # Import the keyboard builder
-                from src.bot.keyboards import build_account_keyboard
-                
-                # Create keyboard for accounts
-                keyboard = build_account_keyboard(accounts, add_stats=True)
-                
-                # Update the loading message with accounts list
-                try:
-                    await loading_message.edit_text(
-                        "📊 <b>Выберите рекламный аккаунт:</b>",
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-                except TelegramBadRequest as e:
-                    if "can't parse entities" in str(e):
-                        # Try without HTML parsing
-                        await loading_message.edit_text(
-                            "📊 Выберите рекламный аккаунт:",
-                            reply_markup=keyboard
-                        )
-                    else:
-                        raise
-                        
-            except Exception as e:
-                logger.error(f"Error handling accounts navigation: {str(e)}")
-                # Try to send an error message
-                try:
-                    await callback.bot.send_message(
-                        chat_id,
-                        f"❌ Ошибка при загрузке аккаунтов: {str(e)}"
-                    )
-                except Exception as inner_error:
-                    logger.error(f"Could not send error message: {str(inner_error)}")
+            # Now show the accounts list
+            # We need to import this here to avoid circular imports
+            from src.bot.handlers.account import cmd_accounts
+            await cmd_accounts(callback.message)
             
         elif menu_item == "auth":
             # Show authentication info

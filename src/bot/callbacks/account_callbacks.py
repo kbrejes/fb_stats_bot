@@ -9,6 +9,10 @@ from aiogram.exceptions import TelegramBadRequest
 
 from src.api.facebook import FacebookAdsClient
 from src.utils.languages import get_text, get_language, fix_user_id
+from src.bot.keyboards import build_account_keyboard, build_date_preset_keyboard
+from src.bot.filters import AccountCallbackFilter, DatePresetCallbackFilter
+from src.data.processor import DataProcessor
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -103,6 +107,7 @@ async def account_menu_callback(callback: CallbackQuery):
     )
 
 @account_router.callback_query(F.data.startswith("account:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def account_callback(callback: CallbackQuery):
     """
     Handle account selection callback.
@@ -432,4 +437,129 @@ async def ad_stats_callback(callback: CallbackQuery):
             )
         except Exception as text_error:
             logger.error(f"Failed to show date selection keyboard: {str(text_error)}")
-            await callback.message.edit_text("❌ Не удалось отобразить выбор периода.") 
+            await callback.message.edit_text("❌ Не удалось отобразить выбор периода.")
+
+@account_router.callback_query(AccountCallbackFilter())
+@handle_exceptions(notify_user=True)
+async def on_account_selected(callback: CallbackQuery, account_id: str):
+    """
+    Handle callback when an ad account is selected.
+    
+    Args:
+        callback: The callback query.
+        account_id: The selected account ID.
+    """
+    await callback.answer("Выбран аккаунт: " + account_id[:8] + "...")
+    
+    user_id = callback.from_user.id
+    await callback.message.edit_text(
+        f"📊 <b>Выбран рекламный аккаунт:</b> <code>{account_id}</code>\n\n"
+        "Выберите период для получения статистики:",
+        parse_mode="HTML",
+        reply_markup=build_date_preset_keyboard(account_id)
+    )
+
+@account_router.callback_query(DatePresetCallbackFilter())
+@handle_exceptions(notify_user=True)
+@api_error_handler(notify_user=True)
+async def on_date_preset_selected(
+    callback: CallbackQuery, account_id: str, date_preset: str
+):
+    """
+    Handle callback when a date preset is selected.
+    
+    Args:
+        callback: The callback query.
+        account_id: The account ID.
+        date_preset: The selected date preset.
+    """
+    await callback.answer(f"Загрузка данных за период: {date_preset}...")
+    
+    user_id = callback.from_user.id
+    
+    await callback.message.edit_text(
+        f"🔄 <b>Загрузка данных...</b>\n\n"
+        f"Аккаунт: <code>{account_id}</code>\n"
+        f"Период: <code>{date_preset}</code>",
+        parse_mode="HTML"
+    )
+    
+    # Создаем клиент Facebook API и получаем данные
+    fb_client = FacebookAdsClient(user_id)
+    account_insights, error = await fb_client.get_account_insights(
+        account_id=account_id, 
+        date_preset=date_preset
+    )
+    
+    if error:
+        await callback.message.edit_text(
+            f"⚠️ <b>Ошибка при получении данных</b>\n\n{error}",
+            parse_mode="HTML",
+            reply_markup=build_account_keyboard([{"account_id": account_id}])
+        )
+        return
+    
+    # Форматируем данные
+    formatted_insights = DataProcessor.format_account_insights(account_insights)
+    
+    await callback.message.edit_text(
+        f"📊 <b>Статистика аккаунта {account_id}</b>\n"
+        f"<i>Период: {date_preset}</i>\n\n"
+        f"{formatted_insights}\n\n"
+        f"<i>Для выбора другого периода, нажмите на соответствующую кнопку:</i>",
+        parse_mode="HTML",
+        reply_markup=build_date_preset_keyboard(account_id)
+    )
+
+@account_router.callback_query(F.data == "back_to_accounts")
+@handle_exceptions(notify_user=True)
+@api_error_handler(notify_user=True)
+async def on_back_to_accounts(callback: CallbackQuery):
+    """
+    Handle callback to go back to the list of accounts.
+    
+    Args:
+        callback: The callback query.
+    """
+    await callback.answer("Загрузка списка аккаунтов...")
+    
+    user_id = callback.from_user.id
+    
+    # Создаем клиент Facebook API и получаем данные
+    fb_client = FacebookAdsClient(user_id)
+    accounts, error = await fb_client.get_accounts()
+    
+    if error:
+        await callback.message.edit_text(
+            f"⚠️ <b>Ошибка при получении данных</b>\n\n{error}",
+            parse_mode="HTML"
+        )
+        return
+    
+    if not accounts:
+        await callback.message.edit_text(
+            "⚠️ У вас нет доступных рекламных аккаунтов. "
+            "Убедитесь, что ваш аккаунт Facebook имеет доступ к рекламным аккаунтам.",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Format accounts data
+    formatted_accounts = DataProcessor.format_accounts(accounts)
+    
+    # Message might be too long for one message
+    account_parts = DataProcessor.truncate_for_telegram(formatted_accounts)
+    
+    # Edit the current message with the first part
+    await callback.message.edit_text(
+        f"💼 <b>Доступные рекламные аккаунты ({len(accounts)})</b>\n\n" + account_parts[0],
+        parse_mode="HTML",
+        reply_markup=build_account_keyboard(accounts)
+    )
+    
+    # Send additional parts if necessary
+    for part in account_parts[1:]:
+        await callback.message.answer(
+            part,
+            parse_mode="HTML"
+        ) 

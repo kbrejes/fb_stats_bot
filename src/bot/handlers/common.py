@@ -16,12 +16,14 @@ from src.utils.languages import set_language, get_language, SUPPORTED_LANGUAGES
 from src.utils.bot_helpers import fix_user_id
 from src.storage.database import get_session
 from src.storage.models import User
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Create a router for common handlers
 router = Router()
 logger = logging.getLogger(__name__)
 
 @router.message(Command("start"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def cmd_start(message: Message):
     """
     Handle the /start command.
@@ -38,6 +40,7 @@ async def cmd_start(message: Message):
     )
 
 @router.message(Command("menu"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def cmd_menu(message: Message):
     """
     Handle the /menu command.
@@ -53,6 +56,7 @@ async def cmd_menu(message: Message):
     )
 
 @router.message(Command("language"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def cmd_language(message: Message):
     """
     Handle the /language command.
@@ -79,6 +83,7 @@ async def cmd_language(message: Message):
     )
 
 @router.callback_query(F.data.startswith("back:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_back_callback(callback: CallbackQuery):
     """
     Handle back button callback.
@@ -139,6 +144,7 @@ async def process_back_callback(callback: CallbackQuery):
             logger.warning(f"Could not edit message when canceling: {str(e)}")
 
 @router.callback_query(F.data.startswith("language:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_language_callback(callback: CallbackQuery):
     """
     Handle language selection callback.
@@ -187,6 +193,7 @@ async def process_language_callback(callback: CallbackQuery):
         )
 
 @router.callback_query(F.data.startswith("menu:campaign:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_menu_campaign_callback(callback: CallbackQuery):
     """
     Handle campaign menu callback - this is the handler for "Back to campaign" button.

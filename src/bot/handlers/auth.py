@@ -16,6 +16,7 @@ from src.api.auth import oauth_handler
 from src.storage.database import get_session
 from src.storage.models import User
 from src.bot.keyboards import build_main_menu_keyboard
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Create a router for auth handlers
 router = Router()
@@ -27,6 +28,7 @@ class AuthStates(StatesGroup):
     waiting_for_code = State()
 
 @router.message(Command("auth"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def cmd_auth(message: Message, state: FSMContext):
     """
     Handle the /auth command.
@@ -53,6 +55,7 @@ async def cmd_auth(message: Message, state: FSMContext):
     )
 
 @router.message(AuthStates.waiting_for_code)
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_auth_code(message: Message, state: FSMContext):
     """
     Process the authorization URL response.
@@ -98,65 +101,60 @@ async def process_auth_code(message: Message, state: FSMContext):
     # Exchange code for token
     await message.answer("🔄 Обмениваем код на токен доступа...")
     
-    try:
-        token_data, error = await oauth_handler.exchange_code_for_token(code)
+    token_data, error = await oauth_handler.exchange_code_for_token(code)
+    
+    if error:
+        await message.answer(f"⚠️ Ошибка при получении токена: {error}")
+        return
         
-        if error:
-            await message.answer(f"⚠️ Ошибка при получении токена: {error}")
-            return
-            
-        if 'access_token' not in token_data:
-            await message.answer("⚠️ В ответе сервера отсутствует токен.")
-            return
-            
-        # Store the token in the database
-        session = get_session()
-        try:
-            print(f"DEBUG: Looking for user {user_id} to store token")
-            user = session.query(User).filter_by(telegram_id=user_id).first()
-            
-            if not user:
-                print(f"DEBUG: User {user_id} not found, creating new user")
-                # Create new user
-                user = User(
-                    telegram_id=user_id,
-                    username=message.from_user.username,
-                    first_name=message.from_user.first_name,
-                    last_name=message.from_user.last_name
-                )
-                session.add(user)
-                
-            # Set the token
-            print(f"DEBUG: Setting token for user {user_id}")
-            user.set_fb_token(
-                token_data['access_token'], 
-                int(token_data.get('expires_in', 0))
+    if 'access_token' not in token_data:
+        await message.answer("⚠️ В ответе сервера отсутствует токен.")
+        return
+        
+    # Store the token in the database
+    session = get_session()
+    try:
+        print(f"DEBUG: Looking for user {user_id} to store token")
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        
+        if not user:
+            print(f"DEBUG: User {user_id} not found, creating new user")
+            # Create new user
+            user = User(
+                telegram_id=user_id,
+                username=message.from_user.username,
+                first_name=message.from_user.first_name,
+                last_name=message.from_user.last_name
             )
+            session.add(user)
             
-            # Set refresh token if provided
-            if 'refresh_token' in token_data:
-                user.set_fb_refresh_token(token_data['refresh_token'])
-                
-            session.commit()
-            print(f"DEBUG: Successfully saved token for user {user_id}")
-            
-            # Verify that the user and token were actually saved
-            saved_user = session.query(User).filter_by(telegram_id=user_id).first()
-            if saved_user and saved_user.is_token_valid():
-                print(f"DEBUG: Verification successful - user {user_id} has valid token")
-            else:
-                print(f"DEBUG: Verification FAILED - user {user_id} token not saved properly")
-                
-        finally:
-            session.close()
-            
-        await message.answer(
-            "✅ Авторизация успешно завершена!\n\n"
-            "Теперь вы можете использовать команду /accounts для просмотра "
-            "доступных рекламных аккаунтов или /help для списка всех команд.",
-            reply_markup=build_main_menu_keyboard()
+        # Set the token
+        print(f"DEBUG: Setting token for user {user_id}")
+        user.set_fb_token(
+            token_data['access_token'], 
+            int(token_data.get('expires_in', 0))
         )
         
-    except Exception as e:
-        logger.error(f"Error during token exchange: {str(e)}")
-        await message.answer(f"⚠️ Произошла ошибка: {str(e)}") 
+        # Set refresh token if provided
+        if 'refresh_token' in token_data:
+            user.set_fb_refresh_token(token_data['refresh_token'])
+            
+        session.commit()
+        print(f"DEBUG: Successfully saved token for user {user_id}")
+        
+        # Verify that the user and token were actually saved
+        saved_user = session.query(User).filter_by(telegram_id=user_id).first()
+        if saved_user and saved_user.is_token_valid():
+            print(f"DEBUG: Verification successful - user {user_id} has valid token")
+        else:
+            print(f"DEBUG: Verification FAILED - user {user_id} token not saved properly")
+            
+    finally:
+        session.close()
+        
+    await message.answer(
+        "✅ Авторизация успешно завершена!\n\n"
+        "Теперь вы можете использовать команду /accounts для просмотра "
+        "доступных рекламных аккаунтов или /help для списка всех команд.",
+        reply_markup=build_main_menu_keyboard()
+    ) 
