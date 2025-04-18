@@ -137,3 +137,13 @@ debug_*.py
 # OS specific files
 .DS_Store
 Thumbs.db database_dev.sqlite
+
+# IDE
+.idea/
+.vscode/
+
+# Local configuration
+.env
+
+# Test reports
+*_report_*.txt
