@@ -136,4 +136,4 @@ debug_*.py
 
 # OS specific files
 .DS_Store
-Thumbs.db 
+Thumbs.db database_dev.sqlite
