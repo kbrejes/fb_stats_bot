@@ -9,7 +9,9 @@ from src.storage.models import User
 
 logger = logging.getLogger(__name__)
 
+# ID возможных ботов
 BOT_ID = 8113924050
+BOT_ID_DEV = 7595294156
 
 async def fix_user_id(user_id: int) -> int:
     """
@@ -21,15 +23,18 @@ async def fix_user_id(user_id: int) -> int:
     Returns:
         The fixed user ID.
     """
-    # Check if we're using the bot ID
-    if user_id == BOT_ID or str(user_id) == str(BOT_ID):
+    # Check if we're using any of the bot IDs
+    if user_id == BOT_ID or str(user_id) == str(BOT_ID) or user_id == BOT_ID_DEV or str(user_id) == str(BOT_ID_DEV):
         # Try to find a valid user
         session = get_session()
         try:
-            user = session.query(User).filter(User.telegram_id != BOT_ID).first()
+            # Исключаем оба ID бота при поиске
+            user = session.query(User).filter(User.telegram_id != BOT_ID, User.telegram_id != BOT_ID_DEV).first()
             if user:
-                logger.debug(f"Replacing bot ID with user ID: {user.telegram_id}")
+                logger.debug(f"Replacing bot ID {user_id} with user ID: {user.telegram_id}")
                 return user.telegram_id
+            else:
+                logger.warning(f"Could not find any valid user to replace bot ID {user_id}")
         except Exception as e:
             logger.error(f"Error finding alternative user: {str(e)}")
         finally:
