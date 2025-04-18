@@ -66,7 +66,7 @@ class FacebookAdsClient:
         self.user_id = user_id
         self.api_version = FB_API_VERSION
         self._access_token = access_token
-        self._base_url = f"https://graph.facebook.com/v{self.api_version}/"
+        self._base_url = f"https://graph.facebook.com/{self.api_version}/"
     
     async def get_access_token(self) -> str:
         """
