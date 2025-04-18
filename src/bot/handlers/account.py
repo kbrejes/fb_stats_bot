@@ -53,14 +53,16 @@ async def cmd_accounts(message: Message):
     if expiration_date:
         print(f"DEBUG: Token expires at: {expiration_date}")
         
-    await message.answer("🔄 Загружаем список ваших рекламных аккаунтов...")
+    # Отправка сообщения о загрузке и сохранение объекта сообщения
+    loading_msg = await message.answer("🔄 Загружаем список ваших рекламных аккаунтов...")
     
     try:
         fb_client = FacebookAdsClient(user_id)
         accounts = await fb_client.get_ad_accounts()
         
         if not accounts:
-            await message.answer(
+            # Обновляем сообщение о загрузке
+            await loading_msg.edit_text(
                 "⚠️ У вас нет доступных рекламных аккаунтов.\n"
                 "Убедитесь, что ваша учетная запись Facebook имеет доступ к рекламным аккаунтам."
             )
@@ -71,29 +73,30 @@ async def cmd_accounts(message: Message):
             # Create keyboard for accounts with additional stats button
             keyboard = build_account_keyboard(accounts, add_stats=True)
             
-            await message.answer(
+            # Обновляем сообщение о загрузке с результатами
+            await loading_msg.edit_text(
                 "📊 <b>Выберите рекламный аккаунт:</b>",
                 parse_mode="HTML",
                 reply_markup=keyboard
             )
         except Exception as e:
             logger.error(f"Error creating account keyboard: {str(e)}")
-            await message.answer(f"⚠️ Ошибка при создании клавиатуры: {str(e)}", parse_mode=None)
+            await loading_msg.edit_text(f"⚠️ Ошибка при создании клавиатуры: {str(e)}", parse_mode=None)
                 
     except FacebookAdsApiError as e:
         # Handle API errors
         if e.code == "TOKEN_EXPIRED":
-            await message.answer(
+            await loading_msg.edit_text(
                 "⚠️ Ваш токен доступа истек. Пожалуйста, пройдите авторизацию заново с помощью команды /auth.",
                 parse_mode=None
             )
         else:
             logger.error(f"Facebook API error in accounts: {e.message} (code: {e.code})")
-            await message.answer(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
+            await loading_msg.edit_text(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
             
     except Exception as e:
         logger.error(f"Unexpected error in accounts: {str(e)}")
-        await message.answer(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
+        await loading_msg.edit_text(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
 
 
 @router.callback_query(F.data.startswith("account:"))

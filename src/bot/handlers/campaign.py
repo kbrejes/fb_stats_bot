@@ -56,14 +56,16 @@ async def cmd_campaigns(message: Message, command: CommandObject):
         )
         return
     
-    await message.answer(f"🔄 Загружаем список кампаний для аккаунта {account_id}...", parse_mode=None)
+    # Отправка сообщения о загрузке и сохранение объекта сообщения
+    loading_msg = await message.answer(f"🔄 Загружаем список кампаний для аккаунта {account_id}...", parse_mode=None)
     
     try:
         fb_client = FacebookAdsClient(user_id)
         campaigns = await fb_client.get_campaigns(account_id)
         
         if not campaigns:
-            await message.answer(
+            # Обновляем сообщение о загрузке
+            await loading_msg.edit_text(
                 "⚠️ Не найдено кампаний для указанного аккаунта. "
                 "Возможно, аккаунт не содержит активных кампаний или у вас нет прав доступа."
             )
@@ -75,49 +77,48 @@ async def cmd_campaigns(message: Message, command: CommandObject):
         # Message might be too long for one message
         campaign_parts = DataProcessor.truncate_for_telegram(formatted_campaigns)
         
-        for i, part in enumerate(campaign_parts):
-            if i == 0:
-                # First part with keyboard
-                try:
-                    await message.answer(
-                        f"📊 Кампании для аккаунта {account_id} ({len(campaigns)}):\n\n```\n{part}\n```",
-                        parse_mode="Markdown",
-                        reply_markup=build_campaign_keyboard(campaigns)
-                    )
-                except Exception as markdown_error:
-                    logger.error(f"Markdown error: {str(markdown_error)}")
-                    # Try without parse_mode if markdown fails
-                    await message.answer(
-                        f"📊 Кампании для аккаунта {account_id} ({len(campaigns)}):\n\n{part}",
-                        reply_markup=build_campaign_keyboard(campaigns)
-                    )
-            else:
-                # Additional parts if any
-                try:
-                    await message.answer(
-                        f"```\n{part}\n```",
-                        parse_mode="Markdown"
-                    )
-                except Exception as markdown_error:
-                    logger.error(f"Markdown error: {str(markdown_error)}")
-                    # Try without parse_mode if markdown fails
-                    await message.answer(part)
+        # Обновляем сообщение о загрузке с первой частью данных
+        try:
+            await loading_msg.edit_text(
+                f"📊 Кампании для аккаунта {account_id} ({len(campaigns)}):\n\n```\n{campaign_parts[0]}\n```",
+                parse_mode="Markdown",
+                reply_markup=build_campaign_keyboard(campaigns)
+            )
+        except Exception as markdown_error:
+            logger.error(f"Markdown error: {str(markdown_error)}")
+            # Try without parse_mode if markdown fails
+            await loading_msg.edit_text(
+                f"📊 Кампании для аккаунта {account_id} ({len(campaigns)}):\n\n{campaign_parts[0]}",
+                reply_markup=build_campaign_keyboard(campaigns)
+            )
+        
+        # Отправляем дополнительные части, если они есть
+        for part in campaign_parts[1:]:
+            try:
+                await message.answer(
+                    f"```\n{part}\n```",
+                    parse_mode="Markdown"
+                )
+            except Exception as markdown_error:
+                logger.error(f"Markdown error: {str(markdown_error)}")
+                # Try without parse_mode if markdown fails
+                await message.answer(part)
                 
     except FacebookAdsApiError as e:
         # Handle API errors
         logger.error(f"Facebook API error in campaigns: {e.message} (code: {e.code})")
         if e.code == "TOKEN_EXPIRED":
-            await message.answer(
+            await loading_msg.edit_text(
                 "⚠️ Ваш токен доступа истек. Пожалуйста, пройдите авторизацию заново с помощью команды /auth.",
                 parse_mode=None
             )
         else:
             logger.error(f"Facebook API error: {e.message} (code: {e.code})")
-            await message.answer(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
+            await loading_msg.edit_text(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
             
     except Exception as e:
         logger.error(f"Unexpected error in campaigns: {str(e)}")
-        await message.answer(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
+        await loading_msg.edit_text(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
 
 
 @router.callback_query(F.data.startswith("campaign:"))

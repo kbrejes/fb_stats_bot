@@ -54,14 +54,16 @@ async def cmd_ads(message: Message, command: CommandObject):
         )
         return
     
-    await message.answer(f"🔄 Загружаем список объявлений для кампании {campaign_id}...", parse_mode=None)
+    # Отправка сообщения о загрузке и сохранение объекта сообщения
+    loading_msg = await message.answer(f"🔄 Загружаем список объявлений для кампании {campaign_id}...", parse_mode=None)
     
     try:
         fb_client = FacebookAdsClient(user_id)
         ads = await fb_client.get_ads(campaign_id)
         
         if not ads:
-            await message.answer(
+            # Обновляем сообщение о загрузке
+            await loading_msg.edit_text(
                 "⚠️ Не найдено объявлений для указанной кампании. "
                 "Возможно, кампания не содержит активных объявлений или у вас нет прав доступа."
             )
@@ -73,49 +75,48 @@ async def cmd_ads(message: Message, command: CommandObject):
         # Message might be too long for one message
         ad_parts = DataProcessor.truncate_for_telegram(formatted_ads)
         
-        for i, part in enumerate(ad_parts):
-            if i == 0:
-                # First part with keyboard
-                try:
-                    await message.answer(
-                        f"📊 Объявления для кампании {campaign_id} ({len(ads)}):\n\n```\n{part}\n```",
-                        parse_mode="Markdown",
-                        reply_markup=build_ad_keyboard(ads, campaign_id)
-                    )
-                except Exception as markdown_error:
-                    logger.error(f"Markdown error: {str(markdown_error)}")
-                    # Try without parse_mode if markdown fails
-                    await message.answer(
-                        f"📊 Объявления для кампании {campaign_id} ({len(ads)}):\n\n{part}",
-                        reply_markup=build_ad_keyboard(ads, campaign_id)
-                    )
-            else:
-                # Additional parts if any
-                try:
-                    await message.answer(
-                        f"```\n{part}\n```",
-                        parse_mode="Markdown"
-                    )
-                except Exception as markdown_error:
-                    logger.error(f"Markdown error: {str(markdown_error)}")
-                    # Try without parse_mode if markdown fails
-                    await message.answer(part)
+        # Обновляем сообщение о загрузке с первой частью данных
+        try:
+            await loading_msg.edit_text(
+                f"📊 Объявления для кампании {campaign_id} ({len(ads)}):\n\n```\n{ad_parts[0]}\n```",
+                parse_mode="Markdown",
+                reply_markup=build_ad_keyboard(ads, campaign_id)
+            )
+        except Exception as markdown_error:
+            logger.error(f"Markdown error: {str(markdown_error)}")
+            # Try without parse_mode if markdown fails
+            await loading_msg.edit_text(
+                f"📊 Объявления для кампании {campaign_id} ({len(ads)}):\n\n{ad_parts[0]}",
+                reply_markup=build_ad_keyboard(ads, campaign_id)
+            )
+        
+        # Отправляем дополнительные части, если они есть
+        for part in ad_parts[1:]:
+            try:
+                await message.answer(
+                    f"```\n{part}\n```",
+                    parse_mode="Markdown"
+                )
+            except Exception as markdown_error:
+                logger.error(f"Markdown error: {str(markdown_error)}")
+                # Try without parse_mode if markdown fails
+                await message.answer(part)
                 
     except FacebookAdsApiError as e:
         # Handle API errors
         logger.error(f"Facebook API error in ads: {e.message} (code: {e.code})")
         if e.code == "TOKEN_EXPIRED":
-            await message.answer(
+            await loading_msg.edit_text(
                 "⚠️ Ваш токен доступа истек. Пожалуйста, пройдите авторизацию заново с помощью команды /auth.",
                 parse_mode=None
             )
         else:
             logger.error(f"Facebook API error: {e.message} (code: {e.code})")
-            await message.answer(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
+            await loading_msg.edit_text(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
             
     except Exception as e:
         logger.error(f"Unexpected error in ads: {str(e)}")
-        await message.answer(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
+        await loading_msg.edit_text(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
 
 
 @handle_exceptions(notify_user=True, log_error=True)
