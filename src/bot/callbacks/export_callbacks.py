@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramBadRequest
 from src.storage.database import get_session
 from src.storage.models import Cache
 from src.utils.export import export_data_to_csv, export_data_to_json, export_data_to_excel
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 export_router = Router()
 
 @export_router.callback_query(F.data.startswith("export:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def export_callback(callback: CallbackQuery):
     """
     Handle export requests.

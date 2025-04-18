@@ -18,12 +18,14 @@ from src.storage.models import User
 from src.data.processor import DataProcessor
 from src.utils.bot_helpers import fix_user_id, check_token_validity
 from src.bot.keyboards import build_account_keyboard, build_date_preset_keyboard
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Create a router for account handlers
 router = Router()
 logger = logging.getLogger(__name__)
 
 @router.message(Command("accounts"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def cmd_accounts(message: Message):
     """
     Handle the /accounts command.
@@ -95,6 +97,7 @@ async def cmd_accounts(message: Message):
 
 
 @router.callback_query(F.data.startswith("account:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_account_callback(callback: CallbackQuery):
     """
     Handle account selection callback.

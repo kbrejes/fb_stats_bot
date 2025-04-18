@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 account_router = Router()
 
 @account_router.callback_query(F.data.startswith("menu:account"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def account_menu_callback(callback: CallbackQuery):
     """
     Handle account menu button presses.
@@ -133,6 +134,7 @@ async def account_callback(callback: CallbackQuery):
     await account_menu_callback(callback)
 
 @account_router.callback_query(F.data.startswith("account_stats:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def account_stats_callback(callback: CallbackQuery):
     """
     Handle account stats button presses - DISABLED.
@@ -170,6 +172,7 @@ async def account_stats_callback(callback: CallbackQuery):
     return
 
 @account_router.callback_query(F.data.startswith("account_campaigns_stats:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def account_campaigns_stats_callback(callback: CallbackQuery):
     """
     Handle account campaigns stats button presses.
@@ -300,10 +303,11 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
         )
 
 @account_router.callback_query(F.data.startswith("campaign_stats:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def campaign_stats_callback(callback: CallbackQuery):
     """
     Handle campaign stats button presses.
-    Callback data format: campaign_stats:campaign_id[:campaign_name]
+    Callback data format: campaign_stats:campaign_id:campaign_name
     """
     try:
         await callback.answer()
@@ -370,10 +374,11 @@ async def campaign_stats_callback(callback: CallbackQuery):
             await callback.message.edit_text("❌ Не удалось отобразить выбор периода.")
 
 @account_router.callback_query(F.data.startswith("ad_stats:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def ad_stats_callback(callback: CallbackQuery):
     """
     Handle ad stats button presses.
-    Callback data format: ad_stats:ad_id[:ad_name]
+    Callback data format: ad_stats:ad_id:ad_name
     """
     try:
         await callback.answer()

@@ -17,12 +17,14 @@ from src.utils.bot_helpers import fix_user_id, check_token_validity
 from src.bot.keyboards import build_campaign_keyboard
 from src.storage.database import get_session
 from src.storage.models import User
+from src.utils.error_handlers import handle_exceptions
 
 # Create a router for campaign handlers
 router = Router()
 logger = logging.getLogger(__name__)
 
 @router.message(Command("campaigns"))
+@handle_exceptions
 async def cmd_campaigns(message: Message, command: CommandObject):
     """
     Handle the /campaigns command.
@@ -119,6 +121,7 @@ async def cmd_campaigns(message: Message, command: CommandObject):
 
 
 @router.callback_query(F.data.startswith("campaign:"))
+@handle_exceptions
 async def process_campaign_callback(callback: CallbackQuery):
     """
     Handle campaign selection callback.

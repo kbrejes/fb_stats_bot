@@ -15,12 +15,14 @@ from src.api.facebook import FacebookAdsClient, FacebookAdsApiError
 from src.data.processor import DataProcessor
 from src.utils.bot_helpers import fix_user_id, check_token_validity
 from src.bot.keyboards import build_ad_keyboard
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Create a router for ad handlers
 router = Router()
 logger = logging.getLogger(__name__)
 
 @router.message(Command("ads"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def cmd_ads(message: Message, command: CommandObject):
     """
     Handle the /ads command.
@@ -116,6 +118,7 @@ async def cmd_ads(message: Message, command: CommandObject):
         await message.answer(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
 
 
+@handle_exceptions(notify_user=True, log_error=True)
 async def process_ads(callback: CallbackQuery, campaign_id: str, user_id: int):
     """
     Process ads for the selected campaign.

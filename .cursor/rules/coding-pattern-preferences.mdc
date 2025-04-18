@@ -9,18 +9,36 @@ alwaysApply: true
 - You can @ files here
 - You can use markdown but dont have to
 
-# Coding pattern preferences
+# Предпочтения паттернов кодирования
 
-– Always prefer simple solutions  
-– Avoid duplication of code whenever possible, which means checking for other areas of the codebase that might already have similar code and functionality  
-– Write code that takes into account the different environments: dev, test, and prod  
-– You are careful to only make changes that are requested or you are confident are well understood and related to the change being requested  
-– When fixing an issue or bug, do not introduce a new pattern or technology without first exhausting all options for the existing implementation. And if you finally do this, make sure to remove the old implementation afterwards so we don’t have duplicate logic.  
-– Keep the codebase very clean and organized  
-– Avoid writing scripts in files if possible, especially if the script is likely only to be run once  
-– Avoid having files over 200–300 lines of code. Refactor at that point.  
-– Mocking data is only needed for tests, never mock data for dev or prod  
-– Never add stubbing or fake data patterns to code that affects the dev or prod environments  
-– Never overwrite my .env file without first asking and confirming
-– Сheck the implementation's functionality thoroughly before considering it complete and notifying me about it
-– Test your implementation's functionality until it works as expected and make absolutely sure that there are no errors in console before considering it complete and terminating the implementation process
+– Всегда предпочитать простые решения
+– Избегать дублирования кода везде, где это возможно, что означает проверку других частей кодовой базы на наличие схожего кода и функциональности
+– Писать код, учитывающий различные окружения: dev, test и prod
+– Вносить только те изменения, которые запрошены или которые вы уверены, что хорошо понимаете и они связаны с запрашиваемым изменением
+– При исправлении проблемы или ошибки не вводить новый паттерн или технологию, не исчерпав сначала все возможности существующей реализации. А если в итоге это сделать, то убедиться, что старая реализация удалена, чтобы не было дублирования логики
+– Поддерживать кодовую базу в чистоте и хорошей организации
+– По возможности избегать написания скриптов в файлах, особенно если скрипт, вероятно, будет запущен только один раз
+– Избегать файлов размером более 200-300 строк кода. Выполнять рефакторинг при достижении этого предела
+– Моковые данные нужны только для тестов, никогда не использовать моки для dev или prod сред
+– Никогда не добавлять заглушки или фейковые данные в код, который влияет на dev или prod окружения
+– Никогда не перезаписывать .env файл без предварительного запроса и подтверждения
+– Тщательно проверять функциональность реализации перед тем, как считать её завершенной и уведомлять меня об этом
+– Тестировать функциональность реализации до тех пор, пока она не заработает как ожидается, и убедиться, что в консоли нет ошибок, прежде чем считать реализацию завершенной и завершать процесс реализации
+
+# Ограничения по коду и изменениям
+
+– Категорически запрещено создавать новые файлы без моего прямого разрешения
+– При обнаружении проблем (недостающие файлы, ошибки) сначала сообщать мне, а НЕ пытаться "исправить" самостоятельно
+– Не добавлять НИКАКОЙ новой функциональности, которую я явно не запрашивал
+– Строго придерживаться области запрошенных изменений - не выходить за её пределы под предлогом "улучшений"
+– Перед внесением существенных изменений в кодовую базу (более 3 файлов) обязательно получить моё подтверждение
+– Не предлагать автоматически дополнительные улучшения, если я их не запрашивал
+– Полностью запрещены любые несогласованные "творческие" решения и инициативы
+– Если обнаружена "недостающая" функциональность или файл, просто сообщить о проблеме и ждать моих указаний
+
+# Работа с существующей кодовой базой
+
+– В первую очередь изучить, как работает существующая кодовая база
+– Никогда не переписывать существующую логику полностью
+– Соблюдать абсолютную минимальность изменений - только то, что необходимо для решения конкретной задачи
+– Точно соответствовать существующему стилю кода и архитектуре

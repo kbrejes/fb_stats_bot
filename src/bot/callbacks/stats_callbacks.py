@@ -14,6 +14,7 @@ from src.storage.models import User
 from src.utils.message_formatter import format_insights, format_campaign_table
 from src.utils.languages import get_text, get_language, fix_user_id
 from src.bot.keyboards import build_date_preset_keyboard
+from src.utils.error_handlers import handle_exceptions, api_error_handler
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 stats_router = Router()
 
 @stats_router.callback_query(F.data.startswith("stats:"))
+@handle_exceptions(notify_user=True, log_error=True)
 async def stats_callback(callback: CallbackQuery):
     """
     Handle statistics request callbacks.
