@@ -12,9 +12,16 @@ NC='\033[0m' # No Color
 # Основные функции работы с Git
 create_feature_branch() {
     local branch_name=$1
-    git checkout main
+    
+    # Запрашиваем базовую ветку
+    echo -e "${YELLOW}Выберите базовую ветку для создания feature ветки:${NC}"
+    git branch
+    read -p "Введите имя базовой ветки (по умолчанию: restructure-before-split): " base_branch
+    base_branch=${base_branch:-restructure-before-split}
+    
+    git checkout $base_branch
     git checkout -b "feature/$branch_name"
-    echo -e "${GREEN}✅ Ветка feature/$branch_name создана${NC}"
+    echo -e "${GREEN}✅ Ветка feature/$branch_name создана из $base_branch${NC}"
 }
 
 commit_changes() {
@@ -38,6 +45,12 @@ commit_changes() {
 finish_feature() {
     current_branch=$(git rev-parse --abbrev-ref HEAD)
     
+    # Запрашиваем целевую ветку для слияния
+    echo -e "${YELLOW}Выберите целевую ветку для слияния:${NC}"
+    git branch
+    read -p "Введите имя целевой ветки (по умолчанию: restructure-before-split): " target_branch
+    target_branch=${target_branch:-restructure-before-split}
+    
     # Создаем бэкап перед слиянием
     mkdir -p backups
     timestamp=$(date +%Y%m%d_%H%M%S)
@@ -45,7 +58,7 @@ finish_feature() {
     echo -e "${GREEN}✅ Бэкап создан перед слиянием${NC}"
     
     # Проверяем конфликты
-    git checkout main
+    git checkout $target_branch
     can_merge=true
     git merge --no-commit --no-ff "$current_branch" > /dev/null 2>&1 || can_merge=false
     git merge --abort > /dev/null 2>&1
@@ -53,14 +66,14 @@ finish_feature() {
     
     if [ "$can_merge" = false ]; then
         echo -e "${RED}⚠️ Обнаружены конфликты!${NC}"
-        echo -e "1) Создать новую ветку из main"
+        echo -e "1) Создать новую ветку из $target_branch"
         echo -e "2) Продолжить слияние вручную"
         echo -e "3) Отменить операцию"
         read -p "> " option
         
         case "$option" in
             1)
-                git checkout main
+                git checkout $target_branch
                 git checkout -b "${current_branch}_new"
                 echo -e "${GREEN}✅ Создана новая ветка ${current_branch}_new${NC}"
                 return
@@ -76,8 +89,8 @@ finish_feature() {
     fi
     
     # Сливаем изменения
-    git checkout main
-    echo -e "${YELLOW}Сливаем изменения...${NC}"
+    git checkout $target_branch
+    echo -e "${YELLOW}Сливаем изменения в $target_branch...${NC}"
     if git merge "$current_branch"; then
         git tag -f working-version
         echo -e "${GREEN}✅ Слияние успешно выполнено${NC}"
