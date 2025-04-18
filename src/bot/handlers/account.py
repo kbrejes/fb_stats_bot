@@ -19,6 +19,7 @@ from src.data.processor import DataProcessor
 from src.utils.bot_helpers import fix_user_id, check_token_validity
 from src.bot.keyboards import build_account_keyboard, build_date_preset_keyboard
 from src.utils.error_handlers import handle_exceptions, api_error_handler
+from src.bot.types import AccountData, AccountList, TelegramId, AccountId
 
 # Create a router for account handlers
 router = Router()
@@ -26,14 +27,14 @@ logger = logging.getLogger(__name__)
 
 @router.message(Command("accounts"))
 @handle_exceptions(notify_user=True, log_error=True)
-async def cmd_accounts(message: Message):
+async def cmd_accounts(message: Message) -> None:
     """
     Handle the /accounts command.
     
     Args:
         message: The message object.
     """
-    user_id = message.from_user.id
+    user_id: TelegramId = message.from_user.id
     
     # Debug output
     print(f"DEBUG: /accounts command received from user ID: {user_id}")
@@ -58,7 +59,7 @@ async def cmd_accounts(message: Message):
     
     try:
         fb_client = FacebookAdsClient(user_id)
-        accounts = await fb_client.get_ad_accounts()
+        accounts: AccountList = await fb_client.get_ad_accounts()
         
         if not accounts:
             # Обновляем сообщение о загрузке
@@ -101,15 +102,15 @@ async def cmd_accounts(message: Message):
 
 @router.callback_query(F.data.startswith("account:"))
 @handle_exceptions(notify_user=True, log_error=True)
-async def process_account_callback(callback: CallbackQuery):
+async def process_account_callback(callback: CallbackQuery) -> None:
     """
     Handle account selection callback.
     
     Args:
         callback: The callback query.
     """
-    account_id = callback.data.split(':')[1]
-    user_id = callback.from_user.id
+    account_id: AccountId = callback.data.split(':')[1]
+    user_id: TelegramId = callback.from_user.id
     
     print(f"DEBUG: Process account callback - Account ID: {account_id}, User ID: {user_id}")
     

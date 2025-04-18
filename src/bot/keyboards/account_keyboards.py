@@ -2,12 +2,14 @@
 Account-related keyboard builders.
 """
 from typing import List, Dict, Any, Optional
+from aiogram.types import InlineKeyboardMarkup
 
 from src.bot.keyboards.base import KeyboardBuilder
 from src.bot.keyboards.utils import format_button_text, create_callback_data
+from src.bot.types import AccountList, AccountData
 
 
-def build_account_keyboard(accounts: List[Dict], add_stats: bool = False):
+def build_account_keyboard(accounts: AccountList, add_stats: bool = False) -> InlineKeyboardMarkup:
     """
     Build a keyboard with account selection buttons.
     

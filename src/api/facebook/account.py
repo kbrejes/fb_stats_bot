@@ -13,6 +13,8 @@ from src.api.facebook.exceptions import (
     TokenNotSetError
 )
 from src.utils.error_handlers import api_error_handler, handle_exceptions
+from src.api.interfaces import AccountServiceInterface
+from src.bot.types import AccountData
 
 logger = get_logger(__name__)
 
@@ -21,10 +23,11 @@ class AccountMixin:
     """
     Mixin for account-related operations.
     Provides methods for interacting with Facebook ad accounts.
+    Implements AccountServiceInterface.
     """
     
     @api_error_handler(api_name="Facebook Accounts API")
-    async def get_ad_accounts(self) -> List[Dict]:
+    async def get_ad_accounts(self) -> List[Dict[str, Any]]:
         """
         Get all ad accounts available to the user.
         
@@ -49,7 +52,7 @@ class AccountMixin:
             accounts = response.get('data', [])
             
             # Format and save accounts to database
-            formatted_accounts = []
+            formatted_accounts: List[Dict[str, Any]] = []
             for acc in accounts:
                 account_id = acc.get('id', '').replace('act_', '')
                 name = acc.get('name', 'Unnamed Account')
@@ -90,7 +93,7 @@ class AccountMixin:
             session.close()
             
     @handle_exceptions(log_error=True, notify_user=True)
-    async def get_accounts(self) -> Tuple[List[Dict], Optional[str]]:
+    async def get_accounts(self) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         """
         Get the user's ad accounts with error handling for callbacks.
         

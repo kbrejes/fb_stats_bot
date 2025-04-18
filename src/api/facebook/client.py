@@ -21,6 +21,7 @@ from src.api.facebook.exceptions import (
     NetworkError
 )
 from src.utils.error_handlers import api_error_handler
+from src.api.interfaces import FacebookAdsClientInterface
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,7 @@ ssl_context.verify_mode = ssl.CERT_NONE
 class FacebookAdsClient:
     """
     Client for interacting with the Facebook Marketing API.
+    Implements FacebookAdsClientInterface.
     """
     def __init__(self, user_id: int = None, access_token: str = None):
         """
@@ -200,70 +202,31 @@ class FacebookAdsClient:
                                 continue
                             else:
                                 raise RateLimitError(error_message, data)
-                            
-                        # Другие ошибки - используем общий класс FacebookAdsApiError
+                        
+                        # Общая ошибка Facebook API
                         else:
-                            raise FacebookAdsApiError(
-                                message=error_message,
-                                code=str(error_code),
-                                data=data,
-                                http_code=response.status,
-                                fb_error_code=error_code,
-                                fb_error_subcode=error_subcode
-                            )
+                            raise FacebookAdsApiError(error_message, str(error_code), data)
                     
-                    # Если ошибок нет - возвращаем данные
                     return data
                     
             except aiohttp.ClientError as e:
-                logger.error(f"HTTP error during API request: {str(e)}")
-                print(f"DEBUG: HTTP client error: {str(e)}")
-                
-                # Retry for network errors
-                if retry_count < retries:
+                # Network-related errors
+                if retry_count < retries - 1:
                     retry_count += 1
-                    wait_time = min(2 ** retry_count, 60)
-                    logger.info(f"Network error. Retrying in {wait_time} seconds...")
+                    wait_time = min(2 ** retry_count, 30)
+                    logger.warning(f"Network error: {str(e)}. Retrying in {wait_time} seconds...")
                     await asyncio.sleep(wait_time)
-                    continue
-                    
-                raise NetworkError(f"Network error: {str(e)}")
-                
-            except (TokenExpiredError, TokenNotSetError, InsufficientPermissionsError, RateLimitError) as e:
-                # Для специализированных ошибок - просто пробрасываем дальше
-                raise
-                
-            except Exception as e:
-                logger.error(f"Unexpected error during API request: {str(e)}")
-                raise FacebookAdsApiError(f"Unexpected error: {str(e)}")
-        
-        # If we've exhausted all retries
-        raise RateLimitError("Maximum retries exceeded")
+                else:
+                    raise NetworkError(f"Network error after {retries} retries: {str(e)}")
     
     @api_error_handler(api_name="Facebook User API")
     async def get_user_info(self) -> Dict:
         """
-        Get information about the current user.
+        Get information about the authenticated user.
         
         Returns:
-            User information.
+            Dict containing user information.
         """
-        # Simple endpoint to test if the token is working
-        cache_key = f"user_info:{self.user_id}"
-        
-        # Try to get from cache first
-        session = get_session()
-        try:
-            cached_data = Cache.get(session, cache_key)
-            if cached_data:
-                return cached_data
-                
-            # If not in cache, fetch from API
-            data = await self._make_request('me', {'fields': 'id,name,email'})
-            
-            # Cache the result for 1 hour
-            Cache.set(session, cache_key, data, 3600)
-            
-            return data
-        finally:
-            session.close() 
+        return await self._make_request('me', {
+            'fields': 'id,name,email,picture'
+        }) 
