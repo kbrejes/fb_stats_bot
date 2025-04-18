@@ -1,6 +1,14 @@
 # Facebook Ads Telegram Bot
 
-Telegram бот для выгрузки и анализа данных из рекламного кабинета Facebook Ads.
+Телеграм бот для управления рекламными кампаниями в Facebook Ads.
+
+## Особенности
+
+- Интеграция с Facebook Marketing API
+- Просмотр рекламных аккаунтов, кампаний, наборов объявлений и объявлений
+- Получение статистики по рекламным кампаниям
+- Управление рекламными объявлениями (включение/отключение)
+- Система обработки ошибок с уведомлением пользователей
 
 ## Возможности
 
@@ -40,22 +48,84 @@ python initialize_db.py
 python main.py
 ```
 
-## Использование
+## Структура проекта
 
-- `/start` - Начать работу с ботом
-- `/auth` - Авторизоваться в Facebook Ads
-- `/accounts` - Получить список доступных рекламных аккаунтов
-- `/campaigns <account_id>` - Получить список кампаний
-- `/ads <campaign_id>` - Получить список объявлений
-- `/stats <campaign_id|ad_id> <date_range>` - Получить статистику
-- `/export <format>` - Экспортировать данные
-- `/help` - Справка по командам
+```
+fb_ads_tg_bot/
+├── src/
+│   ├── api/
+│   │   ├── facebook/
+│   │   │   ├── mixins/
+│   │   │   │   ├── account.py
+│   │   │   │   ├── ad.py
+│   │   │   │   ├── adset.py
+│   │   │   │   ├── campaign.py
+│   │   │   │   ├── insights.py
+│   │   │   ├── client.py
+│   │   │   ├── __init__.py
+│   ├── bot/
+│   │   ├── callbacks/
+│   │   ├── handlers/
+│   │   ├── keyboards/
+│   │   ├── __init__.py
+│   ├── db/
+│   │   ├── models/
+│   │   ├── repositories/
+│   │   ├── __init__.py
+│   ├── utils/
+│   │   ├── error_handlers.py
+│   │   ├── logger.py
+│   ├── main.py
+├── .env
+├── requirements.txt
+├── README.md
+```
 
-## Требования
+## Система обработки ошибок
 
-- Python 3.10+
-- Telegram Bot API Token
-- Facebook App с правами на Marketing API
+Проект включает централизованную систему обработки ошибок, позволяющую:
+
+- Унифицировать обработку исключений разных типов
+- Автоматически логировать ошибки с контекстом
+- Отправлять пользователям уведомления об ошибках
+- Применять декораторы для простого добавления обработчиков ошибок
+
+### Типы ошибок
+
+- `APIError` - базовый класс для ошибок API
+- `FacebookAPIError` - ошибки Facebook API
+- `TelegramAPIError` - ошибки Telegram API
+- `DatabaseError` - ошибки базы данных
+- `AuthorizationError` - ошибки авторизации
+- `ValidationError` - ошибки валидации данных
+
+### Использование декораторов
+
+```python
+# Декоратор для общей обработки ошибок
+@handle_exceptions()
+async def some_handler(message: Message):
+    # Код обработчика
+
+# Декоратор для обработки ошибок API
+@api_error_handler(api_name="Facebook API")
+async def api_function():
+    # Код функции API
+
+# Декоратор для обработки ошибок базы данных
+@db_error_handler(operation="save user data")
+async def db_function():
+    # Код функции базы данных
+
+# Комбинирование декораторов
+@handle_exceptions()
+@api_error_handler(api_name="Facebook API")
+@db_error_handler(operation="sync data")
+async def complex_function():
+    # Код с обращениями к API и базе данных
+```
+
+Примеры использования см. в файле `src/utils/error_handlers_examples.py`.
 
 ## Лицензия
 
