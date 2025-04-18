@@ -1,7 +1,14 @@
 """
 Facebook Marketing API client modules.
 """
-from src.api.facebook.exceptions import FacebookAdsApiError
+from src.api.facebook.exceptions import (
+    FacebookAdsApiError,
+    TokenExpiredError, 
+    TokenNotSetError,
+    InsufficientPermissionsError,
+    RateLimitError,
+    NetworkError
+)
 from src.api.facebook.client import FacebookAdsClient as BaseClient
 from src.api.facebook.account import AccountMixin
 from src.api.facebook.campaign import CampaignMixin
@@ -22,4 +29,9 @@ class FacebookAdsClient(BaseClient, AccountMixin, CampaignMixin, AdSetMixin, AdM
 __all__ = [
     'FacebookAdsClient',
     'FacebookAdsApiError',
+    'TokenExpiredError',
+    'TokenNotSetError',
+    'InsufficientPermissionsError',
+    'RateLimitError',
+    'NetworkError'
 ] 

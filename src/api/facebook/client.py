@@ -12,7 +12,15 @@ from config.settings import FB_API_VERSION
 from src.storage.database import get_session
 from src.storage.models import User, Account, Cache
 from src.utils.logger import get_logger
-from src.api.facebook.exceptions import FacebookAdsApiError
+from src.api.facebook.exceptions import (
+    FacebookAdsApiError, 
+    TokenExpiredError, 
+    TokenNotSetError,
+    InsufficientPermissionsError,
+    RateLimitError,
+    NetworkError
+)
+from src.utils.error_handlers import api_error_handler
 
 logger = get_logger(__name__)
 
@@ -26,12 +34,13 @@ class FacebookAdsClient:
     """
     Client for interacting with the Facebook Marketing API.
     """
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: int = None, access_token: str = None):
         """
         Initialize the Facebook Ads client.
         
         Args:
             user_id: The Telegram user ID.
+            access_token: Optional direct access token. If provided, user_id is not required.
         """
         print(f"DEBUG: Initializing FacebookAdsClient with user_id: {user_id}")
         
@@ -56,51 +65,35 @@ class FacebookAdsClient:
         
         self.user_id = user_id
         self.api_version = FB_API_VERSION
-        self.base_url = f"https://graph.facebook.com/{self.api_version}"
-        
-        # We'll load the token when needed
-        self._access_token = None
-        
-    async def _get_access_token(self) -> str:
+        self._access_token = access_token
+        self._base_url = f"https://graph.facebook.com/v{self.api_version}/"
+    
+    async def get_access_token(self) -> str:
         """
-        Get the user's access token from the database.
+        Get the access token for API requests.
         
         Returns:
-            The access token.
+            str: The access token.
             
         Raises:
-            FacebookAdsApiError: If no valid token is found.
+            TokenNotSetError: If the token is not set.
+            TokenExpiredError: If the token is expired.
         """
+        # If we already have a token, return it
         if self._access_token:
             return self._access_token
             
+        # Otherwise, load from the database
+        if not self.user_id:
+            raise TokenNotSetError("User ID not set, cannot retrieve token")
+            
         session = get_session()
         try:
-            print(f"DEBUG: Looking for user with ID {self.user_id}")
-            user = session.query(User).filter_by(telegram_id=self.user_id).first()
+            user = session.query(User).filter(User.telegram_id == self.user_id).first()
             
             if not user:
-                print(f"DEBUG: User with ID {self.user_id} not found in database!")
-                
-                # Попытка создать пользователя на лету
-                try:
-                    print(f"DEBUG: Attempting to create user with ID {self.user_id}")
-                    user = User(
-                        telegram_id=self.user_id,
-                        first_name="Auto-created user"
-                    )
-                    session.add(user)
-                    session.commit()
-                    print(f"DEBUG: Successfully created user with ID {self.user_id}")
-                except Exception as e:
-                    print(f"DEBUG: Failed to create user: {str(e)}")
-                    raise FacebookAdsApiError("User not found and could not be created", "USER_NOT_FOUND")
-                    
-                # Повторная попытка получить пользователя
-                user = session.query(User).filter_by(telegram_id=self.user_id).first()
-                if not user:
-                    print(f"DEBUG: User with ID {self.user_id} still not found after creation attempt!")
-                    raise FacebookAdsApiError("User not found", "USER_NOT_FOUND")
+                print(f"DEBUG: User not found with ID {self.user_id}")
+                raise TokenNotSetError(f"User not found with ID {self.user_id}")
             
             print(f"DEBUG: User found: {user.telegram_id}, token valid: {user.is_token_valid()}")
             
@@ -108,14 +101,14 @@ class FacebookAdsClient:
             # Если у нас есть неудачная попытка доступа с этим токеном, проверим это
             token = user.get_fb_token()
             if not token:
-                print(f"DEBUG: Token is None for user {user.telegram_id}, raising TOKEN_NOT_SET")
-                raise FacebookAdsApiError("Facebook token is not set", "TOKEN_NOT_SET")
+                print(f"DEBUG: Token is None for user {user.telegram_id}, raising TokenNotSetError")
+                raise TokenNotSetError("Facebook token is not set")
             
             # Проверка действительности токена
             is_token_valid = user.is_token_valid()
             if not is_token_valid:
-                print(f"DEBUG: Token is invalid for user {user.telegram_id}, raising TOKEN_EXPIRED")
-                raise FacebookAdsApiError("Facebook token is expired or not set", "TOKEN_EXPIRED")
+                print(f"DEBUG: Token is invalid for user {user.telegram_id}, raising TokenExpiredError")
+                raise TokenExpiredError("Facebook token is expired")
             
             print(f"DEBUG: Token is valid and has {len(token)} characters")
             
@@ -123,39 +116,43 @@ class FacebookAdsClient:
             return token
         finally:
             session.close()
-            
+
+    @api_error_handler(api_name="Facebook Marketing API", log_error=True, notify_user=False)
     async def _make_request(self, endpoint: str, params: Optional[Dict] = None,
                           method: str = 'GET', retries: int = 3) -> Dict:
         """
-        Make a request to the Facebook Marketing API.
+        Make a request to the Facebook Marketing API with error handling and retries.
         
         Args:
-            endpoint: The API endpoint.
-            params: The query parameters.
-            method: The HTTP method to use.
-            retries: Number of retries for failed requests.
+            endpoint: The API endpoint to request.
+            params: Optional parameters for the request.
+            method: HTTP method to use. Default is GET.
+            retries: Maximum number of retries. Default is 3.
             
         Returns:
-            The API response data.
+            The JSON response from the API.
             
         Raises:
-            FacebookAdsApiError: If the request fails.
+            FacebookAdsApiError: For API errors.
+            NetworkError: For network-related errors.
         """
-        token = await self._get_access_token()
-        params = params or {}
-        params['access_token'] = token
+        if params is None:
+            params = {}
+            
+        # Get access token (will raise appropriate errors if not available)
+        access_token = await self.get_access_token()
+        params['access_token'] = access_token
         
-        url = f"{self.base_url}/{endpoint}"
-        
+        # Construct URL based on method
         if method == 'GET':
-            url = f"{url}?{urlencode(params)}"
-            params = None
-        
-        # Маскируем токен в URL для отладочных сообщений
-        debug_url = url.replace(token, 'REDACTED_TOKEN')
-        print(f"DEBUG: Making API request to: {debug_url}")
-        
+            query_string = urlencode(params)
+            url = f"{self._base_url}{endpoint}?{query_string}"
+        else:
+            url = f"{self._base_url}{endpoint}"
+            
+        logger.info(f"Making {method} request to {endpoint}")
         retry_count = 0
+        
         while retry_count < retries:
             try:
                 # Using a ClientSession with SSL verification disabled
@@ -181,45 +178,39 @@ class FacebookAdsClient:
                         logger.error(f"Facebook API error: {error_message} (code: {error_code}, type: {error_type}, subcode: {error_subcode})")
                         print(f"DEBUG: API error details: {json.dumps(error, indent=2)}")
                         
-                        # Определяем внутренний код ошибки для нашего приложения
-                        internal_error_code = None
+                        # Определяем тип исключения на основе ошибки API
                         
                         # OAuth ошибки (истекший токен, недостаточные разрешения и т.д.)
                         if error_code == 190 or error_type == 'OAuthException':
                             if "access token" in error_message.lower() and "expired" in error_message.lower():
-                                internal_error_code = "TOKEN_EXPIRED"
+                                raise TokenExpiredError(error_message, data)
                             elif "permission" in error_message.lower():
-                                internal_error_code = "INSUFFICIENT_PERMISSIONS"
+                                raise InsufficientPermissionsError(error_message, data)
                             else:
-                                internal_error_code = "TOKEN_EXPIRED"  # Общий случай для OAuth ошибок
-                            print(f"DEBUG: OAuth error detected: {error_message}. Setting internal_error_code to {internal_error_code}")
-                        
-                        # Ошибки доступа к бизнес-аккаунту
-                        elif error_code == 200:
-                            internal_error_code = "ACCESS_DENIED"
+                                raise TokenExpiredError(error_message, data)  # Общий случай для OAuth ошибок
                         
                         # Ошибки лимита запросов
                         elif error_code in [4, 17, 341]:
-                            internal_error_code = "RATE_LIMIT"
-                        
-                        # Прочие ошибки API
-                        else:
-                            internal_error_code = str(error_code)
-                        
-                        # Проверка на необходимость повторной попытки
-                        if internal_error_code == "RATE_LIMIT" and retry_count < retries:
-                            retry_count += 1
-                            wait_time = min(2 ** retry_count, 60)  # Экспоненциальное ожидание
-                            logger.info(f"Rate limited. Retrying in {wait_time} seconds...")
-                            await asyncio.sleep(wait_time)
-                            continue
+                            # Проверка на необходимость повторной попытки
+                            if retry_count < retries:
+                                retry_count += 1
+                                wait_time = min(2 ** retry_count, 60)  # Экспоненциальное ожидание
+                                logger.info(f"Rate limited. Retrying in {wait_time} seconds...")
+                                await asyncio.sleep(wait_time)
+                                continue
+                            else:
+                                raise RateLimitError(error_message, data)
                             
-                        # Другие ошибки - пробрасываем исключение
-                        raise FacebookAdsApiError(
-                            error_message,
-                            internal_error_code,
-                            data
-                        )
+                        # Другие ошибки - используем общий класс FacebookAdsApiError
+                        else:
+                            raise FacebookAdsApiError(
+                                message=error_message,
+                                code=str(error_code),
+                                data=data,
+                                http_code=response.status,
+                                fb_error_code=error_code,
+                                fb_error_subcode=error_subcode
+                            )
                     
                     # Если ошибок нет - возвращаем данные
                     return data
@@ -236,15 +227,20 @@ class FacebookAdsClient:
                     await asyncio.sleep(wait_time)
                     continue
                     
-                raise FacebookAdsApiError(f"Network error: {str(e)}", "NETWORK_ERROR")
+                raise NetworkError(f"Network error: {str(e)}")
+                
+            except (TokenExpiredError, TokenNotSetError, InsufficientPermissionsError, RateLimitError) as e:
+                # Для специализированных ошибок - просто пробрасываем дальше
+                raise
                 
             except Exception as e:
                 logger.error(f"Unexpected error during API request: {str(e)}")
                 raise FacebookAdsApiError(f"Unexpected error: {str(e)}")
         
         # If we've exhausted all retries
-        raise FacebookAdsApiError("Maximum retries exceeded")
+        raise RateLimitError("Maximum retries exceeded")
     
+    @api_error_handler(api_name="Facebook User API")
     async def get_user_info(self) -> Dict:
         """
         Get information about the current user.
