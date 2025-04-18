@@ -1,0 +1,46 @@
+Running in DEVELOPMENT environment
+2025-04-17 21:47:12,726 - src.storage.database - INFO - Creating database tables...
+2025-04-17 21:47:12,727 - src.storage.database - INFO - Database tables created successfully
+2025-04-17 21:47:12,728 - __main__ - INFO - Starting Facebook Ads Telegram Bot
+2025-04-17 21:47:12,728 - aiogram.dispatcher - INFO - Start polling
+2025-04-17 21:47:13,459 - aiogram.dispatcher - INFO - Run polling for bot @ll_bot_dev_bot id=7595294156 - 'ЛОВИ ЛИДОВ DEV'
+2025-04-17 21:47:18,378 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:47:18,378 - aiogram.dispatcher - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7595294156)
+2025-04-17 21:47:24,309 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:47:24,310 - aiogram.dispatcher - WARNING - Sleep for 1.247678 seconds and try again... (tryings = 1, bot id = 7595294156)
+2025-04-17 21:47:31,703 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:47:31,704 - aiogram.dispatcher - WARNING - Sleep for 1.469348 seconds and try again... (tryings = 2, bot id = 7595294156)
+2025-04-17 21:47:36,921 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:47:36,922 - aiogram.dispatcher - WARNING - Sleep for 1.813493 seconds and try again... (tryings = 3, bot id = 7595294156)
+2025-04-17 21:47:42,066 - aiogram.dispatcher - INFO - Connection established (tryings = 4, bot id = 7595294156)
+2025-04-17 21:47:42,852 - aiogram.event - INFO - Update id=939530279 is handled. Duration 785 ms by bot id=7595294156
+2025-04-17 21:47:43,755 - aiogram.event - INFO - Update id=939530280 is handled. Duration 274 ms by bot id=7595294156
+2025-04-17 21:47:46,389 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:47:46,389 - aiogram.dispatcher - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7595294156)
+2025-04-17 21:47:55,921 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:47:55,922 - aiogram.dispatcher - WARNING - Sleep for 1.385404 seconds and try again... (tryings = 1, bot id = 7595294156)
+2025-04-17 21:48:06,090 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:48:06,090 - aiogram.dispatcher - WARNING - Sleep for 1.592348 seconds and try again... (tryings = 2, bot id = 7595294156)
+2025-04-17 21:48:15,871 - aiogram.dispatcher - INFO - Connection established (tryings = 3, bot id = 7595294156)
+DEBUG: Token validation for user 400133981 - Current time: 2025-04-17T21:48:16.098064, Expires: 2025-06-15T03:46:51.681498, Valid: True
+2025-04-17 21:48:16,266 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:48:16,266 - aiogram.dispatcher - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7595294156)
+DEBUG: Initializing FacebookAdsClient with user_id: 400133981
+DEBUG: Fetching ad accounts for user 400133981
+DEBUG: Looking for user with ID 400133981
+DEBUG: Token validation for user 400133981 - Current time: 2025-04-17T21:48:16.610730, Expires: 2025-06-15T03:46:51.681498, Valid: True
+DEBUG: User found: 400133981, token valid: True
+DEBUG: Token validation for user 400133981 - Current time: 2025-04-17T21:48:16.614106, Expires: 2025-06-15T03:46:51.681498, Valid: True
+DEBUG: Token is valid and has 265 characters
+DEBUG: Making API request to: https://graph.facebook.com/v20.0/me/adaccounts?fields=id%2Cname%2Caccount_status%2Camount_spent%2Cbalance%2Ccurrency%2Ctimezone_name%2Cbusiness_country_code&access_token=REDACTED_TOKEN
+DEBUG: Found 9 ad accounts for user 400133981
+2025-04-17 21:48:17,906 - aiogram.event - INFO - Update id=939530281 is handled. Duration 2034 ms by bot id=7595294156
+2025-04-17 21:48:21,702 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:48:21,703 - aiogram.dispatcher - WARNING - Sleep for 1.262088 seconds and try again... (tryings = 1, bot id = 7595294156)
+2025-04-17 21:48:27,753 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:48:27,754 - aiogram.dispatcher - WARNING - Sleep for 1.626223 seconds and try again... (tryings = 2, bot id = 7595294156)
+2025-04-17 21:48:34,720 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramConflictError: Telegram server says - Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-04-17 21:48:34,721 - aiogram.dispatcher - WARNING - Sleep for 2.150239 seconds and try again... (tryings = 3, bot id = 7595294156)
+2025-04-17 21:48:35,236 - aiogram.dispatcher - WARNING - Received SIGTERM signal
+2025-04-17 21:48:35,237 - aiogram.dispatcher - INFO - Polling stopped for bot @ll_bot_dev_bot id=7595294156 - 'ЛОВИ ЛИДОВ DEV'
+2025-04-17 21:48:35,237 - aiogram.dispatcher - INFO - Polling stopped

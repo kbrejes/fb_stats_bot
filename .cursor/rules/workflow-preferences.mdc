@@ -9,12 +9,12 @@ alwaysApply: true
 - You can @ files here
 - You can use markdown but dont have to
 
-# Coding workflow preferences
+# Предпочтения рабочего процесса при кодировании
 
-- Focus on the areas of code relevant to the task
-- Do not touch code that is unrelated to the task
-- Write thorough tests for all major functionality
-- Avoid making major changes to the patterns and architecture of how a feature works, after it has shown to work well, unless explicitly instructed
-- Always think about what other methods and areas of code might be affected by code changes
-– Сheck the implementation's functionality thoroughly before considering it complete and notifying me about it
-– Test your implementation's functionality until it works as expected and make absolutely sure that there are no errors in console before considering it complete and terminating the implementation process
+– Фокусироваться на областях кода, имеющих отношение к задаче
+– Не трогать код, не связанный с задачей
+– Писать тщательные тесты для всей основной функциональности
+– Избегать внесения серьезных изменений в паттерны и архитектуру работы функциональности, после того как она показала хорошую работу, если явно не указано иное
+– Всегда думать о том, какие другие методы и области кода могут быть затронуты изменениями кода
+– Тщательно проверять функциональность реализации перед тем, как считать её завершенной и уведомлять меня об этом
+– Тестировать функциональность реализации до тех пор, пока она не заработает как ожидается, и убедиться, что в консоли нет ошибок, прежде чем считать реализацию завершенной и завершать процесс реализации
