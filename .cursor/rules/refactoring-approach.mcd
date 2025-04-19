@@ -1,14 +1,13 @@
-# Refactoring approach
-
-– Apply minimal changes, breaking large refactoring tasks into micro-steps
-– Run tests after each step; create basic tests if none exist
-– Verify results by comparing behavior before and after with identical inputs
-– Focus on one module at a time to maintain isolation and prevent unintended effects
-– Document all changes with clear explanations of what was modified and why
-– Strictly maintain existing functionality - any logic change is considered an error
-– Perform A/B testing to verify stability after refactoring
-– Don't simplify or optimize code without explicit approval
-– Never make assumptions about intended functionality; request confirmation when uncertain
-– After breaking large files into smaller ones REMEMBER TO CHECK IMPORTS first, then either:
-  - DELETE the old large file completely if no other code depends on it
-  - or REPLACE it with a small "bridge file" that re-exports from the new structure if imports exist
+Подход к рефакторингу
+– Применять минимальные изменения, разбивая крупные задачи рефакторинга на микро-шаги
+– Запускать тесты после каждого шага; создавать базовые тесты, если их нет
+– Проверять результаты, сравнивая поведение до и после с идентичными входными данными
+– Фокусироваться на одном модуле за раз для сохранения изоляции и предотвращения непреднамеренных эффектов
+– Документировать все изменения с четкими объяснениями того, что было изменено и почему
+– Строго сохранять существующую функциональность - любое изменение логики считается ошибкой
+– Выполнять A/B тестирование для проверки стабильности после рефакторинга
+– Не упрощать и не оптимизировать код без явного одобрения
+– Никогда не делать предположений о предполагаемой функциональности; запрашивать подтверждение в случае неопределенности
+– После разбиения больших файлов на меньшие СНАЧАЛА ПРОВЕРЯТЬ ИМПОРТЫ, затем либо:
+ПОЛНОСТЬЮ УДАЛИТЬ старый большой файл, если никакой другой код от него не зависит
+либо ЗАМЕНИТЬ его небольшим "файлом-мостом", который реэкспортирует из новой структуры, если импорты существуют

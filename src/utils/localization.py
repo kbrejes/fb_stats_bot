@@ -319,5 +319,29 @@ def get_available_languages() -> List[str]:
     """
     return _localization_manager.get_available_languages()
 
+def fix_user_id(user_id: int) -> int:
+    """
+    Fix user ID for the bot ID issue.
+    
+    Args:
+        user_id: The Telegram user ID.
+        
+    Returns:
+        Fixed user ID.
+    """
+    # Проверяем на бота
+    if user_id == 8113924050 or str(user_id) == "8113924050":
+        session = get_session()
+        try:
+            user = session.query(User).filter(User.telegram_id != 8113924050).first()
+            if user:
+                return user.telegram_id
+        except Exception as e:
+            logger.error(f"Error finding alternative user: {str(e)}")
+        finally:
+            session.close()
+    
+    return user_id
+
 # Function alias for shorter syntax (like _() in gettext)
 _ = get_text 
