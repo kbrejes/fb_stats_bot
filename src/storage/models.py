@@ -4,6 +4,7 @@ SQLAlchemy models for the application.
 import json
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from enum import Enum, auto
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
@@ -14,6 +15,12 @@ from src.utils.security import encrypt_token, decrypt_token
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+class UserRole(Enum):
+    """Роли пользователей в системе."""
+    ADMIN = "admin"           # Полный доступ ко всем функциям
+    TARGETOLOGIST = "targetologist"  # Полный доступ кроме платежных данных
+    PARTNER = "partner"       # Ограниченный доступ только к статистике
 
 class User(Base):
     """User model for storing Telegram user data and Facebook tokens."""
@@ -34,6 +41,9 @@ class User(Base):
     
     # User preferences
     language = Column(String(10), default="ru", nullable=False)
+    
+    # Role information
+    role = Column(String(20), default=UserRole.PARTNER.value, nullable=False)
     
     # State tracking
     last_command = Column(String(255), nullable=True)
@@ -147,6 +157,56 @@ class User(Base):
         except json.JSONDecodeError:
             logger.error(f"Failed to decode context for user {self.telegram_id}")
             return {}
+    
+    def get_role(self) -> UserRole:
+        """
+        Get the user's role.
+        
+        Returns:
+            The user's role as UserRole enum.
+        """
+        try:
+            return UserRole(self.role)
+        except ValueError:
+            # If the role is invalid, log an error and return the default role
+            logger.error(f"Invalid role '{self.role}' for user {self.telegram_id}, using default")
+            return UserRole.PARTNER
+    
+    def set_role(self, role: UserRole) -> None:
+        """
+        Set the user's role.
+        
+        Args:
+            role: The role to set for the user.
+        """
+        self.role = role.value
+    
+    def is_admin(self) -> bool:
+        """
+        Check if the user has admin role.
+        
+        Returns:
+            True if the user is an admin, False otherwise.
+        """
+        return self.get_role() == UserRole.ADMIN
+    
+    def is_targetologist(self) -> bool:
+        """
+        Check if the user has targetologist role.
+        
+        Returns:
+            True if the user is a targetologist, False otherwise.
+        """
+        return self.get_role() == UserRole.TARGETOLOGIST
+    
+    def is_partner(self) -> bool:
+        """
+        Check if the user has partner role.
+        
+        Returns:
+            True if the user is a partner, False otherwise.
+        """
+        return self.get_role() == UserRole.PARTNER
 
 
 class Account(Base):
