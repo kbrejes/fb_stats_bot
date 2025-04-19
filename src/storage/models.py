@@ -256,10 +256,10 @@ class User(Base):
     
     def has_campaign_access(self, campaign_id: str) -> bool:
         """
-        Проверяет, имеет ли пользователь доступ к конкретной кампании.
+        Проверяет, имеет ли пользователь доступ к кампании.
         
         Args:
-            campaign_id: ID кампании для проверки.
+            campaign_id: Идентификатор кампании для проверки.
             
         Returns:
             True, если пользователь имеет доступ к кампании, иначе False.
@@ -268,9 +268,220 @@ class User(Base):
         if self.is_targetologist():
             return True
         
-        # Для партнеров требуется проверка в таблице доступа
-        # TODO: Реализовать проверку доступа к кампании в AccessControlRepository
+        # Для партнеров проверяем наличие специальных разрешений в Access Control
+        try:
+            from sqlalchemy.orm import Session
+            from src.storage.database import get_session
+            
+            session = get_session()
+            try:
+                # Проверяем наличие активного разрешения для данной кампании
+                access_control = session.query(AccessControl).filter(
+                    AccessControl.telegram_id == self.telegram_id,
+                    AccessControl.resource_type == "campaign",
+                    AccessControl.resource_id == campaign_id,
+                    AccessControl.is_active == True
+                ).first()
+                
+                if access_control and access_control.is_valid():
+                    return True
+            finally:
+                session.close()
+        except Exception as e:
+            # В случае ошибки (например, таблица еще не создана) логируем и возвращаем False
+            logger.error(f"Error checking campaign access: {str(e)}")
+        
         return False
+
+
+class AccessControl(Base):
+    """Модель для отслеживания разрешений партнеров."""
+    __tablename__ = 'access_controls'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # Связь с пользователем
+    telegram_id = Column(Integer, ForeignKey('users.telegram_id'), nullable=False)
+    
+    # Тип ресурса и его идентификатор
+    resource_type = Column(String(50), nullable=False)  # campaign, account, etc.
+    resource_id = Column(String(255), nullable=False)
+    
+    # Срок действия разрешения
+    created_at = Column(DateTime, default=func.now())
+    expires_at = Column(DateTime, nullable=True)  # Если None, разрешение не истекает
+    
+    # Статус разрешения
+    is_active = Column(Boolean, default=True)
+    
+    # Дополнительные параметры (JSON)
+    parameters = Column(Text, nullable=True)
+    
+    # Отношения
+    user = relationship("User", backref="access_controls")
+    
+    def is_valid(self) -> bool:
+        """
+        Проверяет, действительно ли разрешение.
+        
+        Returns:
+            True, если разрешение активно и не истекло, иначе False.
+        """
+        if not self.is_active:
+            return False
+            
+        if self.expires_at is not None and datetime.now() > self.expires_at:
+            return False
+            
+        return True
+    
+    def get_params(self) -> Dict[str, Any]:
+        """
+        Получает параметры разрешения.
+        
+        Returns:
+            Словарь с параметрами или пустой словарь, если параметры не заданы.
+        """
+        if not self.parameters:
+            return {}
+            
+        try:
+            return json.loads(self.parameters)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to decode parameters for access control {self.id}")
+            return {}
+    
+    def set_params(self, params: Dict[str, Any]):
+        """
+        Устанавливает параметры разрешения.
+        
+        Args:
+            params: Словарь с параметрами.
+        """
+        self.parameters = json.dumps(params)
+    
+    def extend_expiration(self, days: int = 30):
+        """
+        Продляет срок действия разрешения.
+        
+        Args:
+            days: Количество дней для продления.
+        """
+        now = datetime.now()
+        if self.expires_at is None:
+            # Если разрешение не имеет срока действия, устанавливаем его
+            self.expires_at = now + timedelta(days=days)
+        else:
+            # Если срок действия уже установлен, продляем его
+            self.expires_at = self.expires_at + timedelta(days=days)
+    
+    def deactivate(self):
+        """Деактивирует разрешение."""
+        self.is_active = False
+    
+    def reactivate(self):
+        """Активирует разрешение."""
+        self.is_active = True
+        
+        now = datetime.now()
+        # Если срок действия истек, продляем его на 30 дней
+        if self.expires_at is not None and now > self.expires_at:
+            self.expires_at = now + timedelta(days=30)
+
+
+class AccessRequest(Base):
+    """Модель для запросов доступа от партнеров."""
+    __tablename__ = 'access_requests'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # Связь с пользователем
+    telegram_id = Column(Integer, ForeignKey('users.telegram_id'), nullable=False)
+    
+    # Тип ресурса и идентификатор
+    resource_type = Column(String(50), nullable=False)  # campaign, account, etc.
+    resource_id = Column(String(255), nullable=False)
+    
+    # Статус запроса
+    status = Column(String(20), default="pending", nullable=False)  # pending, approved, rejected
+    
+    # Дополнительная информация
+    message = Column(Text, nullable=True)  # Сообщение от пользователя
+    admin_notes = Column(Text, nullable=True)  # Заметки администратора
+    
+    # Запрашиваемая длительность доступа (в днях)
+    requested_duration = Column(Integer, default=30, nullable=False)
+    
+    # Таймстампы
+    created_at = Column(DateTime, default=func.now())
+    processed_at = Column(DateTime, nullable=True)  # Время обработки запроса
+    processed_by = Column(Integer, nullable=True)  # ID администратора, обработавшего запрос
+    
+    # Связи
+    user = relationship("User", backref="access_requests")
+    
+    def is_pending(self) -> bool:
+        """
+        Проверяет, находится ли запрос в ожидании обработки.
+        
+        Returns:
+            True, если запрос в статусе 'pending', иначе False.
+        """
+        return self.status == "pending"
+    
+    def is_approved(self) -> bool:
+        """
+        Проверяет, был ли запрос одобрен.
+        
+        Returns:
+            True, если запрос в статусе 'approved', иначе False.
+        """
+        return self.status == "approved"
+    
+    def is_rejected(self) -> bool:
+        """
+        Проверяет, был ли запрос отклонен.
+        
+        Returns:
+            True, если запрос в статусе 'rejected', иначе False.
+        """
+        return self.status == "rejected"
+    
+    def approve(self, admin_id: int, admin_notes: str = None):
+        """
+        Одобряет запрос доступа.
+        
+        Args:
+            admin_id: ID администратора, одобрившего запрос.
+            admin_notes: Заметки администратора (опционально).
+        """
+        self.status = "approved"
+        self.processed_at = datetime.now()
+        self.processed_by = admin_id
+        
+        if admin_notes:
+            self.admin_notes = admin_notes
+    
+    def reject(self, admin_id: int, admin_notes: str = None):
+        """
+        Отклоняет запрос доступа.
+        
+        Args:
+            admin_id: ID администратора, отклонившего запрос.
+            admin_notes: Заметки администратора (опционально).
+        """
+        self.status = "rejected"
+        self.processed_at = datetime.now()
+        self.processed_by = admin_id
+        
+        if admin_notes:
+            self.admin_notes = admin_notes
+    
+    def reset_status(self):
+        """Сбрасывает статус запроса до 'pending'."""
+        self.status = "pending"
+        self.processed_at = None
+        self.processed_by = None
 
 
 class Account(Base):
