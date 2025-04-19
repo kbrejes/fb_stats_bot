@@ -350,4 +350,101 @@ class Cache(Base):
         for entry in expired_entries:
             session.delete(entry)
         
-        session.commit() 
+        session.commit()
+
+    @classmethod
+    def clear_by_prefix(cls, session, prefix: str):
+        """
+        Clear all cache entries with a given prefix.
+        
+        Args:
+            session: The database session.
+            prefix: The prefix to match in cache keys.
+        """
+        # Find all entries with the given prefix
+        cache_entries = session.query(cls).filter(
+            cls.key.like(f"{prefix}%")
+        ).all()
+        
+        # Delete them
+        for entry in cache_entries:
+            session.delete(entry)
+        
+        session.commit()
+
+    @classmethod
+    def clear_all(cls, session):
+        """
+        Clear all cache entries.
+        
+        Args:
+            session: The database session.
+        """
+        return cls.clear_by_prefix(session, "")
+
+
+class AccessRequest(Base):
+    """Model for managing partner access requests."""
+    __tablename__ = 'access_requests'
+
+    # Primary key
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # Foreign key to User (partner)
+    partner_id = Column(Integer, ForeignKey('users.telegram_id'), nullable=False)
+    
+    # Request information
+    status = Column(String(20), default="pending", nullable=False)  # 'pending', 'approved', 'rejected'
+    requested_at = Column(DateTime, default=func.now(), nullable=False)
+    processed_at = Column(DateTime, nullable=True)
+    
+    # Foreign key to User (admin who processed the request)
+    processed_by = Column(Integer, ForeignKey('users.telegram_id'), nullable=True)
+    
+    # Relationships
+    partner = relationship("User", foreign_keys=[partner_id])
+    admin = relationship("User", foreign_keys=[processed_by])
+    
+    def __repr__(self):
+        return f"<AccessRequest {self.id} by partner {self.partner_id}, status: {self.status}>"
+
+
+class AccessControl(Base):
+    """Model for managing partner access to campaigns."""
+    __tablename__ = 'access_controls'
+
+    # Primary key
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # Foreign key to User (partner)
+    partner_id = Column(Integer, ForeignKey('users.telegram_id'), nullable=False)
+    
+    # Foreign key to User (admin who granted access)
+    admin_id = Column(Integer, ForeignKey('users.telegram_id'), nullable=False)
+    
+    # Campaign information
+    campaign_id = Column(String(255), nullable=False)
+    
+    # Access information
+    granted_at = Column(DateTime, default=func.now(), nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    
+    # Relationships
+    partner = relationship("User", foreign_keys=[partner_id])
+    admin = relationship("User", foreign_keys=[admin_id])
+    
+    def __repr__(self):
+        return f"<AccessControl {self.id} for partner {self.partner_id}, campaign: {self.campaign_id}>"
+    
+    def is_expired(self) -> bool:
+        """
+        Check if the access has expired.
+        
+        Returns:
+            True if the access has expired, False otherwise.
+        """
+        if not self.expires_at:
+            return False
+            
+        return datetime.now() > self.expires_at 
