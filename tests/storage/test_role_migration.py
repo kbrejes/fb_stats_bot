@@ -12,8 +12,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Add project root to path
-sys.path.append(str(Path(__file__).parent))
+# Add project root to path if needed
+sys.path.append(str(Path(__file__).parent.parent.parent))
 
 # Create a temporary environment with in-memory database
 os.environ["ENVIRONMENT"] = "test"
