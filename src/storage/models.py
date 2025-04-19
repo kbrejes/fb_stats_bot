@@ -3,7 +3,7 @@ SQLAlchemy models for the application.
 """
 import json
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
@@ -12,6 +12,7 @@ from sqlalchemy.sql import func
 from src.storage.database import Base
 from src.utils.security import encrypt_token, decrypt_token
 from src.utils.logger import get_logger
+from src.storage.enums import UserRole
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,9 @@ class User(Base):
     
     # User preferences
     language = Column(String(10), default="ru", nullable=False)
+    
+    # User role for access control
+    role = Column(String(20), default=UserRole.PARTNER.value, nullable=False)
     
     # State tracking
     last_command = Column(String(255), nullable=True)
@@ -147,6 +151,126 @@ class User(Base):
         except json.JSONDecodeError:
             logger.error(f"Failed to decode context for user {self.telegram_id}")
             return {}
+    
+    def get_user_role(self) -> UserRole:
+        """
+        Получает роль пользователя как объект перечисления UserRole.
+        
+        Returns:
+            Объект UserRole, соответствующий роли пользователя.
+        """
+        try:
+            return UserRole(self.role)
+        except ValueError:
+            logger.warning(f"Invalid role '{self.role}' for user {self.telegram_id}, using PARTNER as default")
+            # Если роль недействительна, используем роль по умолчанию
+            return UserRole.PARTNER
+    
+    def set_user_role(self, role: UserRole) -> bool:
+        """
+        Устанавливает роль пользователя.
+        
+        Args:
+            role: Роль пользователя (объект UserRole или строка).
+            
+        Returns:
+            True, если роль была установлена успешно, иначе False.
+        """
+        if isinstance(role, str):
+            if not UserRole.has_value(role):
+                logger.error(f"Trying to set invalid role '{role}' for user {self.telegram_id}")
+                return False
+            self.role = role
+        else:
+            self.role = role.value
+        
+        return True
+    
+    def is_admin(self) -> bool:
+        """
+        Проверяет, является ли пользователь администратором.
+        
+        Returns:
+            True, если пользователь имеет роль ADMIN, иначе False.
+        """
+        return self.get_user_role() == UserRole.ADMIN
+    
+    def is_targetologist(self) -> bool:
+        """
+        Проверяет, является ли пользователь таргетологом или администратором.
+        
+        Returns:
+            True, если пользователь имеет роль TARGETOLOGIST или ADMIN, иначе False.
+        """
+        role = self.get_user_role()
+        return role in [UserRole.TARGETOLOGIST, UserRole.ADMIN]
+    
+    def is_partner(self) -> bool:
+        """
+        Проверяет, является ли пользователь партнером.
+        Все пользователи имеют как минимум права партнера.
+        
+        Returns:
+            True всегда, так как все пользователи имеют как минимум права партнера.
+        """
+        return True
+    
+    def has_financial_access(self) -> bool:
+        """
+        Проверяет, имеет ли пользователь доступ к финансовой информации.
+        
+        Returns:
+            True, если пользователь имеет роль ADMIN, иначе False.
+        """
+        return self.is_admin()
+    
+    def has_creative_access(self) -> bool:
+        """
+        Проверяет, имеет ли пользователь доступ к управлению креативами.
+        
+        Returns:
+            True, если пользователь имеет роль ADMIN или TARGETOLOGIST, иначе False.
+        """
+        return self.is_targetologist()
+    
+    def has_user_management_access(self) -> bool:
+        """
+        Проверяет, имеет ли пользователь доступ к управлению пользователями.
+        
+        Returns:
+            True, если пользователь имеет роль ADMIN, иначе False.
+        """
+        return self.is_admin()
+    
+    def has_permission(self, required_role: UserRole) -> bool:
+        """
+        Проверяет, имеет ли пользователь разрешения роли required_role.
+        
+        Args:
+            required_role: Требуемая роль для проверки.
+            
+        Returns:
+            True, если пользователь имеет соответствующие права доступа, иначе False.
+        """
+        return self.get_user_role().has_permission(required_role)
+    
+    def has_campaign_access(self, campaign_id: str) -> bool:
+        """
+        Проверяет, имеет ли пользователь доступ к конкретной кампании.
+        
+        Args:
+            campaign_id: ID кампании для проверки.
+            
+        Returns:
+            True, если пользователь имеет доступ к кампании, иначе False.
+        """
+        # Администраторы и таргетологи имеют доступ ко всем кампаниям
+        if self.is_targetologist():
+            return True
+        
+        # Для партнеров требуется проверка в таблице доступа
+        # TODO: Реализовать проверку доступа к кампании в AccessControlRepository
+        return False
 
 
 class Account(Base):
