@@ -1,0 +1,18 @@
+{
+  "available_languages": ["ru", "en"],
+  "default_language": "ru",
+  "language_names": {
+    "ru": "Русский",
+    "en": "English"
+  },
+  "categories": [
+    "menu",
+    "errors",
+    "stats",
+    "auth",
+    "common",
+    "help",
+    "admin",
+    "roles"
+  ]
+} 

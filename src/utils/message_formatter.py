@@ -599,4 +599,77 @@ def format_campaign_table(campaigns: List[Dict], insights: List[Dict], date_pres
     # Join campaign blocks with double line breaks
     message += "\n\n".join(campaign_blocks)
     
-    return message 
+    return message
+
+def format_user_list(users: List[User]) -> str:
+    """
+    Форматирует список пользователей для отображения.
+    
+    Args:
+        users: Список объектов пользователей.
+        
+    Returns:
+        Отформатированный текст со списком пользователей.
+    """
+    if not users:
+        return _("admin.no_users_found")
+    
+    # Заголовок сообщения
+    result = [_("admin.users_list_header")]
+    
+    # Группируем пользователей по ролям для более удобного отображения
+    users_by_role = {}
+    for user in users:
+        role = user.get_user_role()
+        if role not in users_by_role:
+            users_by_role[role] = []
+        users_by_role[role].append(user)
+    
+    # Выводим пользователей по группам ролей
+    for role in UserRole:
+        role_users = users_by_role.get(role, [])
+        if role_users:
+            result.append(f"\n<b>{_(f'roles.{role.value}')}</b> ({len(role_users)}):")
+            
+            for user in role_users:
+                username = user.username or _("common.no_username")
+                full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or _("common.no_name")
+                
+                result.append(
+                    f"• {username} - {full_name} [ID: <code>{user.telegram_id}</code>]"
+                )
+    
+    # Общая статистика
+    result.append(f"\n<b>{_('admin.total_users')}</b>: {len(users)}")
+    
+    return "\n".join(result)
+
+
+def format_user_info(user: User) -> str:
+    """
+    Форматирует информацию об одном пользователе.
+    
+    Args:
+        user: Объект пользователя.
+        
+    Returns:
+        Отформатированный текст с информацией о пользователе.
+    """
+    if not user:
+        return _("admin.user_not_found_generic")
+    
+    username = user.username or _("common.no_username")
+    full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or _("common.no_name")
+    role = user.get_user_role()
+    registered_at = user.created_at.strftime("%d.%m.%Y %H:%M") if user.created_at else _("common.unknown")
+    last_active = user.updated_at.strftime("%d.%m.%Y %H:%M") if user.updated_at else _("common.unknown")
+    
+    return (
+        f"<b>{_('admin.user_info')}</b>\n"
+        f"ID: <code>{user.telegram_id}</code>\n"
+        f"{_('common.username')}: @{username}\n"
+        f"{_('common.full_name')}: {full_name}\n"
+        f"{_('common.role')}: {_(f'roles.{role.value}')}\n"
+        f"{_('common.registered_at')}: {registered_at}\n"
+        f"{_('common.last_active')}: {last_active}"
+    ) 

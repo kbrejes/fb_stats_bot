@@ -11,16 +11,18 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config.settings import BOT_TOKEN
 from src.storage.database import init_db
-from src.bot.callbacks import callback_router
+from src.bot.callbacks import router as callback_router
 from src.bot.handlers import (
     common_router, 
     auth_router, 
     account_router, 
     campaign_router, 
     ad_router,
-    main_router
+    main_router,
+    admin_router
 )
 from src.utils.logger import setup_logging
+from src.middleware.role_middleware import RoleMiddleware
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -33,6 +35,7 @@ dp = Dispatcher(storage=storage)
 # Include routers
 dp.include_router(common_router)   # Common commands
 dp.include_router(callback_router)  # Callbacks
+dp.include_router(admin_router)     # Admin commands
 dp.include_router(account_router)   # Account-related handlers
 dp.include_router(campaign_router)  # Campaign-related handlers
 dp.include_router(ad_router)        # Ad-related handlers

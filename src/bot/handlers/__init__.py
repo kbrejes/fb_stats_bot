@@ -7,6 +7,7 @@ from src.bot.handlers.account import router as account_router
 from src.bot.handlers.campaign import router as campaign_router
 from src.bot.handlers.ad import router as ad_router
 from src.bot.handlers.main import router as main_router
+from src.bot.handlers.admin import router as admin_router
 
 # Export routers to be used in main bot module
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     'account_router', 
     'campaign_router', 
     'ad_router',
-    'main_router'
+    'main_router',
+    'admin_router'
 ] 
