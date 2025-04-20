@@ -296,7 +296,7 @@ class CampaignAccessMiddleware(BaseMiddleware):
         
         # Для партнеров проверяем наличие доступа к конкретной кампании
         has_access = self._access_control_repo.check_access(
-            user_id=db_user.telegram_id,
+            telegram_id=db_user.telegram_id,
             resource_type="campaign",
             resource_id=campaign_id
         )
