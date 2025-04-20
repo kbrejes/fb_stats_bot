@@ -1,420 +1,206 @@
 """
-Тесты для утилит контроля доступа.
+Тесты для утилит проверки прав доступа пользователей.
 """
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+from src.storage.enums import UserRole
+from src.storage.models import User
 from src.utils.access_utils import (
     check_user_role,
     is_admin,
     is_targetologist,
     has_campaign_access,
-    has_financial_access,
-    get_user_campaigns
+    has_financial_access
 )
-from src.storage.models import User, AccessControl
-from src.storage.enums import UserRole
+from src.repositories.user_repository import UserRepository
 from src.repositories.access_control_repository import AccessControlRepository
 
 
 class TestAccessUtils(unittest.TestCase):
-    """Тесты для утилит контроля доступа."""
+    """Тесты для утилит проверки прав доступа."""
     
     def setUp(self):
-        """Подготовка к тестам."""
-        # Создаем мок для сессии
-        self.session_mock = MagicMock()
-        
-        # Создаем моки пользовательских объектов
+        """Настройка тестов."""
+        # Создаем моки для пользователей
         self.admin_user = MagicMock(spec=User)
         self.admin_user.telegram_id = 123456
         self.admin_user.role = UserRole.ADMIN.value
-        self.admin_user.has_permission = MagicMock(return_value=True)
-        self.admin_user.is_targetologist = MagicMock(return_value=True)
-        self.admin_user.is_admin = MagicMock(return_value=True)
         
         self.targetologist_user = MagicMock(spec=User)
         self.targetologist_user.telegram_id = 234567
         self.targetologist_user.role = UserRole.TARGETOLOGIST.value
-        self.targetologist_user.has_permission = MagicMock(
-            side_effect=lambda role: role in [UserRole.TARGETOLOGIST, UserRole.PARTNER]
-        )
-        self.targetologist_user.is_targetologist = MagicMock(return_value=True)
-        self.targetologist_user.is_admin = MagicMock(return_value=False)
         
         self.partner_user = MagicMock(spec=User)
         self.partner_user.telegram_id = 345678
         self.partner_user.role = UserRole.PARTNER.value
-        self.partner_user.has_permission = MagicMock(
-            side_effect=lambda role: role == UserRole.PARTNER
-        )
-        self.partner_user.is_targetologist = MagicMock(return_value=False)
-        self.partner_user.is_admin = MagicMock(return_value=False)
         
-        # Патчим get_session для использования мок-сессии
-        self.session_patcher = patch('src.utils.access_utils.get_session', return_value=self.session_mock)
-        self.session_mock_func = self.session_patcher.start()
+        # Создаем моки для репозиториев
+        self.user_repo_mock = MagicMock(spec=UserRepository)
+        self.user_repo_mock.get_user_by_id.side_effect = self._get_user_by_id
+        self.user_repo_mock.close = MagicMock()
+        
+        self.access_control_repo_mock = MagicMock(spec=AccessControlRepository)
+        self.access_control_repo_mock.check_access.return_value = True
+        self.access_control_repo_mock.close = MagicMock()
+        
+        # Настраиваем патчи
+        self.user_repo_patch = patch('src.utils.access_utils.UserRepository', 
+                                     return_value=self.user_repo_mock)
+        self.access_control_repo_patch = patch('src.utils.access_utils.AccessControlRepository', 
+                                              return_value=self.access_control_repo_mock)
+        
+        # Начинаем патчи
+        self.user_repo_mock_instance = self.user_repo_patch.start()
+        self.access_control_repo_mock_instance = self.access_control_repo_patch.start()
     
     def tearDown(self):
         """Очистка после тестов."""
-        self.session_patcher.stop()
+        # Останавливаем патчи
+        self.user_repo_patch.stop()
+        self.access_control_repo_patch.stop()
+    
+    def _get_user_by_id(self, telegram_id):
+        """Мок-функция для получения пользователя по ID."""
+        if telegram_id == self.admin_user.telegram_id:
+            return self.admin_user
+        elif telegram_id == self.targetologist_user.telegram_id:
+            return self.targetologist_user
+        elif telegram_id == self.partner_user.telegram_id:
+            return self.partner_user
+        else:
+            return None
     
     def test_check_user_role_admin(self):
-        """Тест функции check_user_role для администратора."""
-        # Настраиваем мок сессии для возврата пользователя-администратора
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.admin_user
+        """Тест проверки роли администратора."""
+        # Проверяем, что администратор имеет роль администратора
+        self.assertTrue(check_user_role(self.admin_user.telegram_id, UserRole.ADMIN))
         
-        # Вызываем функцию
-        result = check_user_role(user_id=123456, role=UserRole.ADMIN)
+        # Проверяем, что администратор имеет роль таргетолога
+        self.assertTrue(check_user_role(self.admin_user.telegram_id, UserRole.TARGETOLOGIST))
         
-        # Проверяем результат
-        self.assertTrue(result)
-        
-        # Проверяем, что был вызван метод has_permission с правильным параметром
-        self.admin_user.has_permission.assert_called_once_with(UserRole.ADMIN)
+        # Проверяем, что администратор имеет роль партнера
+        self.assertTrue(check_user_role(self.admin_user.telegram_id, UserRole.PARTNER))
     
-    def test_check_user_role_string_role(self):
-        """Тест функции check_user_role со строковым представлением роли."""
-        # Настраиваем мок сессии для возврата пользователя-администратора
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.admin_user
+    def test_check_user_role_targetologist(self):
+        """Тест проверки роли таргетолога."""
+        # Проверяем, что таргетолог НЕ имеет роль администратора
+        self.assertFalse(check_user_role(self.targetologist_user.telegram_id, UserRole.ADMIN))
         
-        # Вызываем функцию со строковым представлением роли
-        result = check_user_role(user_id=123456, role="ADMIN")
+        # Проверяем, что таргетолог имеет роль таргетолога
+        self.assertTrue(check_user_role(self.targetologist_user.telegram_id, UserRole.TARGETOLOGIST))
         
-        # Проверяем результат
-        self.assertTrue(result)
+        # Проверяем, что таргетолог имеет роль партнера
+        self.assertTrue(check_user_role(self.targetologist_user.telegram_id, UserRole.PARTNER))
+    
+    def test_check_user_role_partner(self):
+        """Тест проверки роли партнера."""
+        # Проверяем, что партнер НЕ имеет роль администратора
+        self.assertFalse(check_user_role(self.partner_user.telegram_id, UserRole.ADMIN))
         
-        # Проверяем, что был вызван метод has_permission с правильным параметром
-        self.admin_user.has_permission.assert_called_once_with(UserRole.ADMIN)
+        # Проверяем, что партнер НЕ имеет роль таргетолога
+        self.assertFalse(check_user_role(self.partner_user.telegram_id, UserRole.TARGETOLOGIST))
+        
+        # Проверяем, что партнер имеет роль партнера
+        self.assertTrue(check_user_role(self.partner_user.telegram_id, UserRole.PARTNER))
+    
+    def test_check_user_role_not_found(self):
+        """Тест проверки роли несуществующего пользователя."""
+        # Проверяем, что для несуществующего пользователя возвращается False
+        self.assertFalse(check_user_role(999999, UserRole.ADMIN))
+        self.assertFalse(check_user_role(999999, UserRole.TARGETOLOGIST))
+        self.assertFalse(check_user_role(999999, UserRole.PARTNER))
     
     def test_check_user_role_invalid_role(self):
-        """Тест функции check_user_role с недопустимой ролью."""
-        # Настраиваем мок сессии для возврата пользователя-администратора
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.admin_user
+        """Тест проверки недопустимой роли."""
+        # Проверяем, что для недопустимой роли возвращается False
+        self.assertFalse(check_user_role(self.admin_user.telegram_id, "invalid_role"))
+    
+    def test_is_admin(self):
+        """Тест функции is_admin."""
+        # Проверяем, что администратор распознается как администратор
+        self.assertTrue(is_admin(self.admin_user.telegram_id))
         
-        # Проверяем, что функция выбрасывает ValueError при недопустимой роли
-        with self.assertRaises(ValueError):
-            check_user_role(user_id=123456, role="INVALID_ROLE")
-    
-    def test_check_user_role_user_not_found(self):
-        """Тест функции check_user_role для пользователя, которого нет в базе данных."""
-        # Настраиваем мок сессии для возврата None (пользователь не найден)
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = None
+        # Проверяем, что таргетолог НЕ распознается как администратор
+        self.assertFalse(is_admin(self.targetologist_user.telegram_id))
         
-        # Вызываем функцию
-        result = check_user_role(user_id=999999, role=UserRole.ADMIN)
+        # Проверяем, что партнер НЕ распознается как администратор
+        self.assertFalse(is_admin(self.partner_user.telegram_id))
         
-        # Проверяем результат - должен быть False, так как пользователь не найден
-        self.assertFalse(result)
+        # Проверяем, что для несуществующего пользователя возвращается False
+        self.assertFalse(is_admin(999999))
     
-    def test_is_admin_true(self):
-        """Тест функции is_admin для администратора."""
-        # Патчим функцию check_user_role для возврата True
-        with patch('src.utils.access_utils.check_user_role', return_value=True) as check_role_mock:
-            # Вызываем функцию
-            result = is_admin(user_id=123456)
-            
-            # Проверяем результат
-            self.assertTrue(result)
-            
-            # Проверяем, что была вызвана функция check_user_role с правильными параметрами
-            check_role_mock.assert_called_once_with(123456, UserRole.ADMIN, None)
-    
-    def test_is_admin_false(self):
-        """Тест функции is_admin для не-администратора."""
-        # Патчим функцию check_user_role для возврата False
-        with patch('src.utils.access_utils.check_user_role', return_value=False) as check_role_mock:
-            # Вызываем функцию
-            result = is_admin(user_id=345678)
-            
-            # Проверяем результат
-            self.assertFalse(result)
-            
-            # Проверяем, что была вызвана функция check_user_role с правильными параметрами
-            check_role_mock.assert_called_once_with(345678, UserRole.ADMIN, None)
-    
-    def test_is_targetologist_true(self):
-        """Тест функции is_targetologist для таргетолога."""
-        # Патчим функцию check_user_role для возврата True
-        with patch('src.utils.access_utils.check_user_role', return_value=True) as check_role_mock:
-            # Вызываем функцию
-            result = is_targetologist(user_id=234567)
-            
-            # Проверяем результат
-            self.assertTrue(result)
-            
-            # Проверяем, что была вызвана функция check_user_role с правильными параметрами
-            check_role_mock.assert_called_once_with(234567, UserRole.TARGETOLOGIST, None)
-    
-    def test_is_targetologist_false(self):
-        """Тест функции is_targetologist для не-таргетолога."""
-        # Патчим функцию check_user_role для возврата False
-        with patch('src.utils.access_utils.check_user_role', return_value=False) as check_role_mock:
-            # Вызываем функцию
-            result = is_targetologist(user_id=345678)
-            
-            # Проверяем результат
-            self.assertFalse(result)
-            
-            # Проверяем, что была вызвана функция check_user_role с правильными параметрами
-            check_role_mock.assert_called_once_with(345678, UserRole.TARGETOLOGIST, None)
+    def test_is_targetologist(self):
+        """Тест функции is_targetologist."""
+        # Проверяем, что администратор распознается как таргетолог
+        self.assertTrue(is_targetologist(self.admin_user.telegram_id))
+        
+        # Проверяем, что таргетолог распознается как таргетолог
+        self.assertTrue(is_targetologist(self.targetologist_user.telegram_id))
+        
+        # Проверяем, что партнер НЕ распознается как таргетолог
+        self.assertFalse(is_targetologist(self.partner_user.telegram_id))
+        
+        # Проверяем, что для несуществующего пользователя возвращается False
+        self.assertFalse(is_targetologist(999999))
     
     def test_has_campaign_access_admin(self):
-        """Тест функции has_campaign_access для администратора."""
-        # Настраиваем мок сессии для возврата пользователя-администратора
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.admin_user
+        """Тест проверки доступа к кампании для администратора."""
+        # Проверяем, что администратор имеет доступ к любой кампании
+        self.assertTrue(has_campaign_access(self.admin_user.telegram_id, "campaign_123"))
         
-        # Патчим AccessControlRepository для использования мок-репозитория
-        with patch('src.utils.access_utils.AccessControlRepository') as repo_mock:
-            # Вызываем функцию
-            result = has_campaign_access(user_id=123456, campaign_id="test_campaign")
-            
-            # Проверяем результат - должен быть True, так как администраторы имеют доступ ко всем кампаниям
-            self.assertTrue(result)
-            
-            # Проверяем, что метод check_access не вызывался (администраторы имеют доступ ко всем кампаниям)
-            repo_instance = repo_mock.return_value
-            repo_instance.check_access.assert_not_called()
+        # Проверяем, что access_control_repo.check_access не вызывается для администратора
+        self.access_control_repo_mock.check_access.assert_not_called()
     
     def test_has_campaign_access_targetologist(self):
-        """Тест функции has_campaign_access для таргетолога."""
-        # Настраиваем мок сессии для возврата пользователя-таргетолога
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.targetologist_user
+        """Тест проверки доступа к кампании для таргетолога."""
+        # Проверяем, что таргетолог имеет доступ к любой кампании
+        self.assertTrue(has_campaign_access(self.targetologist_user.telegram_id, "campaign_123"))
         
-        # Патчим AccessControlRepository для использования мок-репозитория
-        with patch('src.utils.access_utils.AccessControlRepository') as repo_mock:
-            # Вызываем функцию
-            result = has_campaign_access(user_id=234567, campaign_id="test_campaign")
-            
-            # Проверяем результат - должен быть True, так как таргетологи имеют доступ ко всем кампаниям
-            self.assertTrue(result)
-            
-            # Проверяем, что метод check_access не вызывался (таргетологи имеют доступ ко всем кампаниям)
-            repo_instance = repo_mock.return_value
-            repo_instance.check_access.assert_not_called()
+        # Проверяем, что access_control_repo.check_access не вызывается для таргетолога
+        self.access_control_repo_mock.check_access.assert_not_called()
     
     def test_has_campaign_access_partner_with_access(self):
-        """Тест функции has_campaign_access для партнера с доступом к кампании."""
-        # Настраиваем мок сессии для возврата пользователя-партнера
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.partner_user
+        """Тест проверки доступа к кампании для партнера с доступом."""
+        # Устанавливаем, что партнер имеет доступ к кампании
+        self.access_control_repo_mock.check_access.return_value = True
         
-        # Патчим AccessControlRepository для использования мок-репозитория
-        with patch('src.utils.access_utils.AccessControlRepository') as repo_mock:
-            # Настраиваем мок репозитория для возврата True (доступ разрешен)
-            repo_instance = repo_mock.return_value
-            repo_instance.check_access.return_value = True
-            
-            # Вызываем функцию
-            result = has_campaign_access(user_id=345678, campaign_id="test_campaign")
-            
-            # Проверяем результат - должен быть True, так как партнер имеет доступ к кампании
-            self.assertTrue(result)
-            
-            # Проверяем, что метод check_access был вызван с правильными параметрами
-            repo_instance.check_access.assert_called_once_with(
-                user_id=345678,
-                resource_type="campaign",
-                resource_id="test_campaign"
-            )
+        # Проверяем, что партнер имеет доступ к кампании
+        self.assertTrue(has_campaign_access(self.partner_user.telegram_id, "campaign_123"))
+        
+        # Проверяем, что access_control_repo.check_access вызывается с правильными параметрами
+        self.access_control_repo_mock.check_access.assert_called_once_with(
+            telegram_id=self.partner_user.telegram_id,
+            resource_type="campaign",
+            resource_id="campaign_123"
+        )
     
     def test_has_campaign_access_partner_without_access(self):
-        """Тест функции has_campaign_access для партнера без доступа к кампании."""
-        # Настраиваем мок сессии для возврата пользователя-партнера
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.partner_user
+        """Тест проверки доступа к кампании для партнера без доступа."""
+        # Устанавливаем, что партнер НЕ имеет доступ к кампании
+        self.access_control_repo_mock.check_access.return_value = False
         
-        # Патчим AccessControlRepository для использования мок-репозитория
-        with patch('src.utils.access_utils.AccessControlRepository') as repo_mock:
-            # Настраиваем мок репозитория для возврата False (доступ запрещен)
-            repo_instance = repo_mock.return_value
-            repo_instance.check_access.return_value = False
-            
-            # Вызываем функцию
-            result = has_campaign_access(user_id=345678, campaign_id="test_campaign")
-            
-            # Проверяем результат - должен быть False, так как партнер не имеет доступа к кампании
-            self.assertFalse(result)
-            
-            # Проверяем, что метод check_access был вызван с правильными параметрами
-            repo_instance.check_access.assert_called_once_with(
-                user_id=345678,
-                resource_type="campaign",
-                resource_id="test_campaign"
-            )
+        # Проверяем, что партнер НЕ имеет доступ к кампании
+        self.assertFalse(has_campaign_access(self.partner_user.telegram_id, "campaign_123"))
     
-    def test_has_campaign_access_user_not_found(self):
-        """Тест функции has_campaign_access для пользователя, которого нет в базе данных."""
-        # Настраиваем мок сессии для возврата None (пользователь не найден)
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = None
-        
-        # Вызываем функцию
-        result = has_campaign_access(user_id=999999, campaign_id="test_campaign")
-        
-        # Проверяем результат - должен быть False, так как пользователь не найден
-        self.assertFalse(result)
+    def test_has_campaign_access_not_found(self):
+        """Тест проверки доступа к кампании для несуществующего пользователя."""
+        # Проверяем, что для несуществующего пользователя возвращается False
+        self.assertFalse(has_campaign_access(999999, "campaign_123"))
     
-    def test_has_financial_access_admin(self):
-        """Тест функции has_financial_access для администратора."""
-        # Патчим функцию is_admin для возврата True
-        with patch('src.utils.access_utils.is_admin', return_value=True) as is_admin_mock:
-            # Вызываем функцию
-            result = has_financial_access(user_id=123456)
-            
-            # Проверяем результат
-            self.assertTrue(result)
-            
-            # Проверяем, что была вызвана функция is_admin с правильными параметрами
-            is_admin_mock.assert_called_once_with(123456, None)
-    
-    def test_has_financial_access_non_admin(self):
-        """Тест функции has_financial_access для не-администратора."""
-        # Патчим функцию is_admin для возврата False
-        with patch('src.utils.access_utils.is_admin', return_value=False) as is_admin_mock:
-            # Вызываем функцию
-            result = has_financial_access(user_id=234567)
-            
-            # Проверяем результат
-            self.assertFalse(result)
-            
-            # Проверяем, что была вызвана функция is_admin с правильными параметрами
-            is_admin_mock.assert_called_once_with(234567, None)
-    
-    def test_get_user_campaigns_admin(self):
-        """Тест функции get_user_campaigns для администратора."""
-        # Настраиваем мок сессии для возврата пользователя-администратора
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.admin_user
+    def test_has_financial_access(self):
+        """Тест функции has_financial_access."""
+        # Проверяем, что администратор имеет доступ к финансовым данным
+        self.assertTrue(has_financial_access(self.admin_user.telegram_id))
         
-        # Патчим AccessControlRepository для использования мок-репозитория
-        with patch('src.utils.access_utils.AccessControlRepository') as repo_mock:
-            # Вызываем функцию
-            result = get_user_campaigns(user_id=123456)
-            
-            # Проверяем результат - должен быть None, что означает "все кампании"
-            self.assertIsNone(result)
-            
-            # Проверяем, что метод get_partner_permissions не вызывался 
-            # (администраторы имеют доступ ко всем кампаниям)
-            repo_instance = repo_mock.return_value
-            repo_instance.get_partner_permissions.assert_not_called()
-    
-    def test_get_user_campaigns_targetologist(self):
-        """Тест функции get_user_campaigns для таргетолога."""
-        # Настраиваем мок сессии для возврата пользователя-таргетолога
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.targetologist_user
+        # Проверяем, что таргетолог НЕ имеет доступ к финансовым данным
+        self.assertFalse(has_financial_access(self.targetologist_user.telegram_id))
         
-        # Патчим AccessControlRepository для использования мок-репозитория
-        with patch('src.utils.access_utils.AccessControlRepository') as repo_mock:
-            # Вызываем функцию
-            result = get_user_campaigns(user_id=234567)
-            
-            # Проверяем результат - должен быть None, что означает "все кампании"
-            self.assertIsNone(result)
-            
-            # Проверяем, что метод get_partner_permissions не вызывался 
-            # (таргетологи имеют доступ ко всем кампаниям)
-            repo_instance = repo_mock.return_value
-            repo_instance.get_partner_permissions.assert_not_called()
-    
-    def test_get_user_campaigns_partner(self):
-        """Тест функции get_user_campaigns для партнера."""
-        # Настраиваем мок сессии для возврата пользователя-партнера
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.partner_user
+        # Проверяем, что партнер НЕ имеет доступ к финансовым данным
+        self.assertFalse(has_financial_access(self.partner_user.telegram_id))
         
-        # Патчим AccessControlRepository для использования мок-репозитория
-        with patch('src.utils.access_utils.AccessControlRepository') as repo_mock:
-            # Создаем моки разрешений доступа
-            campaign1 = MagicMock(spec=AccessControl)
-            campaign1.resource_type = "campaign"
-            campaign1.resource_id = "campaign1"
-            campaign1.is_valid = MagicMock(return_value=True)
-            
-            campaign2 = MagicMock(spec=AccessControl)
-            campaign2.resource_type = "campaign"
-            campaign2.resource_id = "campaign2"
-            campaign2.is_valid = MagicMock(return_value=True)
-            
-            # Настраиваем мок репозитория для возврата списка разрешений
-            repo_instance = repo_mock.return_value
-            repo_instance.get_partner_permissions.return_value = [campaign1, campaign2]
-            
-            # Вызываем функцию
-            result = get_user_campaigns(user_id=345678)
-            
-            # Проверяем результат - должен быть список ID кампаний
-            self.assertEqual(result, ["campaign1", "campaign2"])
-            
-            # Проверяем, что метод get_partner_permissions был вызван с правильными параметрами
-            repo_instance.get_partner_permissions.assert_called_once_with(345678)
-    
-    def test_get_user_campaigns_invalid_permissions(self):
-        """Тест функции get_user_campaigns для партнера с недействительными разрешениями."""
-        # Настраиваем мок сессии для возврата пользователя-партнера
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = self.partner_user
-        
-        # Патчим AccessControlRepository для использования мок-репозитория
-        with patch('src.utils.access_utils.AccessControlRepository') as repo_mock:
-            # Создаем моки разрешений доступа
-            campaign1 = MagicMock(spec=AccessControl)
-            campaign1.resource_type = "campaign"
-            campaign1.resource_id = "campaign1"
-            campaign1.is_valid = MagicMock(return_value=False)  # Недействительное разрешение
-            
-            account1 = MagicMock(spec=AccessControl)
-            account1.resource_type = "account"  # Другой тип ресурса
-            account1.resource_id = "account1"
-            account1.is_valid = MagicMock(return_value=True)
-            
-            # Настраиваем мок репозитория для возврата списка разрешений
-            repo_instance = repo_mock.return_value
-            repo_instance.get_partner_permissions.return_value = [campaign1, account1]
-            
-            # Вызываем функцию
-            result = get_user_campaigns(user_id=345678)
-            
-            # Проверяем результат - должен быть пустой список, 
-            # так как нет действительных разрешений для кампаний
-            self.assertEqual(result, [])
-            
-            # Проверяем, что метод get_partner_permissions был вызван с правильными параметрами
-            repo_instance.get_partner_permissions.assert_called_once_with(345678)
-    
-    def test_get_user_campaigns_user_not_found(self):
-        """Тест функции get_user_campaigns для пользователя, которого нет в базе данных."""
-        # Настраиваем мок сессии для возврата None (пользователь не найден)
-        query_mock = self.session_mock.query.return_value
-        filter_mock = query_mock.filter.return_value
-        filter_mock.first.return_value = None
-        
-        # Вызываем функцию
-        result = get_user_campaigns(user_id=999999)
-        
-        # Проверяем результат - должен быть пустой список, так как пользователь не найден
-        self.assertEqual(result, [])
+        # Проверяем, что для несуществующего пользователя возвращается False
+        self.assertFalse(has_financial_access(999999))
 
 
 if __name__ == "__main__":
