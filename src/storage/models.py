@@ -3,9 +3,9 @@ SQLAlchemy models for the application.
 """
 import json
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -14,6 +14,51 @@ from src.utils.security import encrypt_token, decrypt_token
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Ассоциативная таблица для связи многие-ко-многим между пользователями и аккаунтами
+accounts_to_users = Table(
+    'accounts_to_users',
+    Base.metadata,
+    Column('user_id', Integer, ForeignKey('users.telegram_id'), primary_key=True),
+    Column('account_id', Integer, ForeignKey('accounts.id'), primary_key=True)
+)
+
+class Permission(Base):
+    """Model for storing role-based permissions."""
+    __tablename__ = 'permissions'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    role = Column(String(255), nullable=False)
+    permission = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    users = relationship(
+        "User", 
+        primaryjoin="Permission.role==User.role",
+        foreign_keys="User.role",
+        backref="permissions",
+        viewonly=True
+    )
+    
+    def __repr__(self):
+        return f"<Permission {self.id}: {self.role} - {self.permission}>"
+    
+    @classmethod
+    def get_permissions_for_role(cls, session, role_name: str) -> List[str]:
+        """
+        Get all permissions for a specific role.
+        
+        Args:
+            session: The database session.
+            role_name: The name of the role.
+            
+        Returns:
+            List of permission strings for this role.
+        """
+        permissions = session.query(cls).filter_by(role=role_name).all()
+        return [p.permission for p in permissions if p.permission]
 
 class User(Base):
     """User model for storing Telegram user data and Facebook tokens."""
@@ -39,12 +84,20 @@ class User(Base):
     last_command = Column(String(255), nullable=True)
     last_context = Column(Text, nullable=True)  # JSON-encoded context data
     
+    # Role-based access control
+    role = Column(String(255), nullable=True)
+    
     # Timestamps
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships
     accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
+    shared_accounts = relationship(
+        "Account",
+        secondary=accounts_to_users,
+        backref="shared_users"
+    )
 
     def set_fb_token(self, token: str, expires_in: int = 0):
         """
@@ -147,6 +200,35 @@ class User(Base):
         except json.JSONDecodeError:
             logger.error(f"Failed to decode context for user {self.telegram_id}")
             return {}
+    
+    def get_permissions(self, session) -> List[str]:
+        """
+        Get all permissions for this user based on their role.
+        
+        Args:
+            session: The database session.
+            
+        Returns:
+            List of permission strings for this user.
+        """
+        if not self.role:
+            return []
+        
+        return Permission.get_permissions_for_role(session, self.role)
+    
+    def has_permission(self, session, permission: str) -> bool:
+        """
+        Check if the user has a specific permission.
+        
+        Args:
+            session: The database session.
+            permission: The permission to check.
+            
+        Returns:
+            True if the user has the permission, False otherwise.
+        """
+        permissions = self.get_permissions(session)
+        return permission in permissions
 
 
 class Account(Base):
@@ -250,7 +332,6 @@ class Cache(Base):
             session.commit()
             return None
         
-        # Return value
         try:
             return json.loads(cache_entry.value)
         except json.JSONDecodeError:
@@ -266,9 +347,7 @@ class Cache(Base):
             session: The database session.
             key: The cache key.
         """
-        # Try to get the cache entry
         cache_entry = session.query(cls).filter_by(key=key).first()
-        
         if cache_entry:
             session.delete(cache_entry)
             session.commit()
@@ -280,14 +359,16 @@ class Cache(Base):
         
         Args:
             session: The database session.
+            
+        Returns:
+            Number of entries cleared.
         """
-        # Find all expired entries
-        expired_entries = session.query(cls).filter(
-            cls.expires_at < datetime.now()
-        ).all()
+        now = datetime.now()
+        expired_entries = session.query(cls).filter(cls.expires_at < now).all()
+        count = len(expired_entries)
         
-        # Delete them
         for entry in expired_entries:
             session.delete(entry)
         
-        session.commit() 
+        session.commit()
+        return count 
