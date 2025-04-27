@@ -18,7 +18,7 @@ from src.utils.export import export_data_to_csv, export_data_to_json, export_dat
 from src.utils.message_formatter import format_insights, format_campaign_table
 from src.utils.logger import get_logger
 from src.utils.languages import get_text, get_language, fix_user_id
-from src.bot.keyboards import build_date_preset_keyboard
+from src.bot.keyboards import build_date_preset_keyboard, build_main_menu_keyboard
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -250,7 +250,7 @@ async def stats_callback(callback: CallbackQuery):
                 ))
         elif object_type == "account_campaigns":
             builder.add(InlineKeyboardButton(
-                text="↩️ Назад к аккаунту",
+                text="⬅️",
                 callback_data=f"menu:account:{object_id}"
             ))
         else:
@@ -338,9 +338,6 @@ async def menu_callback(callback: CallbackQuery):
     
     # Fix for the issue where bot ID might be used
     if user_id == 8113924050 or str(user_id) == "8113924050":
-        from src.storage.database import get_session
-        from src.storage.models import User
-        
         # Try to find a valid user
         session = get_session()
         try:
@@ -363,15 +360,24 @@ async def menu_callback(callback: CallbackQuery):
     if menu_item == "account":
         return
     
+    # Get user role from database
+    session = get_session()
+    user = None
     try:
-        if menu_item == "main":
-            # Показать главное меню
-            from src.bot.keyboards import build_main_menu_keyboard
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
             await callback.message.edit_text(
-                "📋 <b>Главное меню</b>\n\n"
-                "Выберите нужный пункт меню:",
+                "⚠️ Пользователь не найден. Используйте /start для начала работы.",
+                parse_mode="HTML"
+            )
+            return
+            
+        if menu_item == "main":
+            # Показать меню
+            await callback.message.edit_text(
+                "<b>Меню:</b>",
                 parse_mode="HTML",
-                reply_markup=build_main_menu_keyboard()
+                reply_markup=build_main_menu_keyboard(user.role)
             )
             
         elif menu_item == "accounts":
@@ -413,7 +419,7 @@ async def menu_callback(callback: CallbackQuery):
                 # Update the loading message with accounts list
                 try:
                     await loading_message.edit_text(
-                        "📊 <b>Выберите рекламный аккаунт:</b>",
+                        "Выберите рекламный аккаунт:",
                         parse_mode="HTML",
                         reply_markup=keyboard
                     )
@@ -421,7 +427,7 @@ async def menu_callback(callback: CallbackQuery):
                     if "can't parse entities" in str(e):
                         # Try without HTML parsing
                         await loading_message.edit_text(
-                            "📊 Выберите рекламный аккаунт:",
+                            "Выберите рекламный аккаунт:",
                             reply_markup=keyboard
                         )
                     else:
@@ -461,7 +467,7 @@ async def menu_callback(callback: CallbackQuery):
                 "/ads [id_кампании] - Список объявлений для кампании\n"
                 "/stats [id_объекта] [период] - Получение статистики\n"
                 "/export - Экспорт данных в различных форматах\n"
-                "/menu - Показать главное меню\n"
+                "/menu - Показать меню\n"
                 "/language - Изменить язык бота\n"
                 "/help - Показать эту справку",
                 parse_mode="HTML"
@@ -470,26 +476,12 @@ async def menu_callback(callback: CallbackQuery):
         elif menu_item == "language":
             # Show language selection menu
             from src.bot.keyboards import build_language_keyboard
-            from src.utils.languages import get_language
-            
-            # Get the user's current language
-            current_language = get_language(user_id)
-            
-            language_names = {
-                "ru": "🇷🇺 Русский",
-                "en": "🇬🇧 English"
-            }
-            
-            current_language_name = language_names.get(current_language, current_language)
             
             await callback.message.edit_text(
-                f"🌐 <b>Язык / Language</b>\n\n"
-                f"Текущий язык / Current language: <b>{current_language_name}</b>\n\n"
-                f"Выберите язык / Choose your language:",
+                "🌐 Language",
                 parse_mode="HTML",
                 reply_markup=build_language_keyboard()
             )
-        
     except TelegramBadRequest as e:
         # Message was deleted or can't be edited
         print(f"DEBUG: TelegramBadRequest in menu callback: {str(e)}")
@@ -505,6 +497,9 @@ async def menu_callback(callback: CallbackQuery):
             await callback.message.edit_text(f"❌ Ошибка: {str(e)}", parse_mode=None)
         except:
             pass
+    finally:
+        if session:
+            session.close()
 
 @callback_router.callback_query(F.data.startswith("account_campaigns_stats:"))
 async def account_campaigns_stats_callback(callback: CallbackQuery):
@@ -555,7 +550,7 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
             builder = InlineKeyboardBuilder()
             
             builder.add(InlineKeyboardButton(
-                text="↩️ Назад к аккаунту",
+                text="⬅️",
                 callback_data=f"menu:account:{account_id}"
             ))
             
@@ -595,7 +590,7 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
         
         try:
             await callback.message.edit_text(
-                f"📅 Выберите период для статистики кампаний аккаунта <b>{display_name}</b>:",
+                "📅 Выберите период:",
                 parse_mode="HTML",
                 reply_markup=build_date_preset_keyboard(account_id, "account_campaigns", account_name)
             )
@@ -605,7 +600,7 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
             # Try without HTML
             try:
                 await callback.message.edit_text(
-                    f"📅 Выберите период для статистики кампаний аккаунта {display_name}:",
+                    "📅 Выберите период:",
                     reply_markup=build_date_preset_keyboard(account_id, "account_campaigns", account_name)
                 )
             except Exception as text_error:
@@ -619,7 +614,7 @@ async def account_campaigns_stats_callback(callback: CallbackQuery):
         builder = InlineKeyboardBuilder()
         
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к аккаунту",
+            text="⬅️",
             callback_data=f"menu:account:{account_id}"
         ))
         
@@ -707,26 +702,26 @@ async def account_menu_callback(callback: CallbackQuery):
     # Build account menu keyboard
     builder = InlineKeyboardBuilder()
     
-    # Campaign stats button - с укороченным названием
+    # Campaign stats button
     builder.add(InlineKeyboardButton(
         text="📊 Статистика",
         callback_data=f"account_campaigns_stats:{account_id}"
     ))
-    
-    # Back to accounts list button
-    builder.add(InlineKeyboardButton(
-        text="⬅️",
-        callback_data="menu:accounts"
-    ))
-    
+
     # Main menu button
     builder.add(InlineKeyboardButton(
         text="🌎 Меню",
         callback_data="menu:main"
     ))
-    
+
+    # Back to accounts list button
+    builder.add(InlineKeyboardButton(
+        text="⬅️",
+        callback_data="menu:accounts"
+    ))
+
     # Adjust the grid
-    builder.adjust(2)
+    builder.adjust(2, 1)
     
     # Try to get the account name
     account_name = account_id
@@ -742,7 +737,7 @@ async def account_menu_callback(callback: CallbackQuery):
     
     # Send the menu
     await callback.message.edit_text(
-        f"{get_text('account_menu', lang)}: <b>{account_name}</b>",
+        f"<b>{account_name}</b>",
         reply_markup=builder.as_markup(),
         parse_mode="HTML"
     ) 

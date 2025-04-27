@@ -40,7 +40,7 @@ async def cmd_help(message: Message):
         "/ads [id_кампании] - Список объявлений для кампании\n"
         "/stats [id_объекта] [период] - Получение статистики\n"
         "/export - Экспорт данных в различных форматах\n"
-        "/menu - Показать главное меню\n"
+        "/menu - Показать меню\n"
         "/help - Показать эту справку",
         parse_mode="HTML"
     )
@@ -54,8 +54,7 @@ async def cmd_menu(message: Message):
         message: The message object.
     """
     await message.answer(
-        "📋 <b>Главное меню</b>\n\n"
-        "Выберите нужный пункт меню:",
+        "<b>Меню:</b>",
         parse_mode="HTML",
         reply_markup=build_main_menu_keyboard()
     )
@@ -237,13 +236,13 @@ async def process_menu_campaign_callback(callback: CallbackQuery):
             button_count = 0
             
             builder.add(InlineKeyboardButton(
-                text="↩️ Назад к аккаунтам",
+                text="⬅️",
                 callback_data="menu:accounts"
             ))
             button_count += 1
             
             builder.add(InlineKeyboardButton(
-                text="🏠 Главное меню",
+                text="🌎 Меню",
                 callback_data="menu:main"
             ))
             button_count += 1

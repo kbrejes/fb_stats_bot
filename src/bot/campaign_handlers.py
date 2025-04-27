@@ -150,16 +150,21 @@ async def process_campaign_callback(callback: CallbackQuery):
             button_count = 0
             
             builder.add(InlineKeyboardButton(
-                text="↩️ Назад к аккаунтам",
+                text="⬅️",
+                callback_data="menu:campaigns"
+            ))
+            button_count += 1
+            
+            builder.add(InlineKeyboardButton(
+                text="⬅️",
                 callback_data="menu:accounts"
             ))
             button_count += 1
             
             builder.add(InlineKeyboardButton(
-                text="🏠 Главное меню",
+                text="🌎 Меню",
                 callback_data="menu:main"
             ))
-            button_count += 1
             
             if button_count % 2 != 0:
                 builder.add(InlineKeyboardButton(
@@ -217,19 +222,19 @@ async def process_campaign_callback(callback: CallbackQuery):
         button_count = 0
         
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к кампаниям",
+            text="⬅️",
             callback_data="menu:campaigns"
         ))
         button_count += 1
         
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к аккаунтам",
+            text="⬅️",
             callback_data="menu:accounts"
         ))
         button_count += 1
         
         builder.add(InlineKeyboardButton(
-            text="🏠 Главное меню",
+            text="🌎 Меню",
             callback_data="menu:main"
         ))
         button_count += 1
@@ -274,16 +279,21 @@ async def process_campaigns(callback: CallbackQuery, account_id: str, user_id: i
             button_count = 0
             
             builder.add(InlineKeyboardButton(
-                text="↩️ Назад к аккаунтам",
+                text="⬅️",
+                callback_data="menu:campaigns"
+            ))
+            button_count += 1
+            
+            builder.add(InlineKeyboardButton(
+                text="⬅️",
                 callback_data="menu:accounts"
             ))
             button_count += 1
             
             builder.add(InlineKeyboardButton(
-                text="🏠 Главное меню",
+                text="🌎 Меню",
                 callback_data="menu:main"
             ))
-            button_count += 1
             
             if button_count % 2 != 0:
                 builder.add(InlineKeyboardButton(
@@ -349,19 +359,19 @@ async def process_campaigns(callback: CallbackQuery, account_id: str, user_id: i
         button_count = 0
         
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к кампаниям",
+            text="⬅️",
             callback_data="menu:campaigns"
         ))
         button_count += 1
         
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к аккаунтам",
+            text="⬅️",
             callback_data="menu:accounts"
         ))
         button_count += 1
         
         builder.add(InlineKeyboardButton(
-            text="🏠 Главное меню",
+            text="🌎 Меню",
             callback_data="menu:main"
         ))
         button_count += 1
@@ -398,19 +408,19 @@ async def process_campaigns(callback: CallbackQuery, account_id: str, user_id: i
         button_count = 0
         
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к кампаниям",
+            text="⬅️",
             callback_data="menu:campaigns"
         ))
         button_count += 1
         
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к аккаунтам",
+            text="⬅️",
             callback_data="menu:accounts"
         ))
         button_count += 1
         
         builder.add(InlineKeyboardButton(
-            text="🏠 Главное меню",
+            text="🌎 Меню",
             callback_data="menu:main"
         ))
         button_count += 1

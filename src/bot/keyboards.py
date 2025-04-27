@@ -197,22 +197,24 @@ def build_date_preset_keyboard(object_id: str, object_type: str, object_name: st
     # Группируем пресеты дат по категориям для лучшей навигации
     date_groups = {
         'Сегодня/Вчера': {
-            'today': '📅 Сегодня',
-            'yesterday': '📅 Вчера',
+            'today': 'Сегодня',
+            'yesterday': 'Вчера',
         },
         'Последние дни': {
-            'last_3d': '📅 3 дня',
-            'last_7d': '📅 7 дней',
-            'last_14d': '📅 14 дней',
-            'last_30d': '📅 30 дней',
+            'last_3d': '3 дня',
+            'last_7d': '7 дней',
+            'last_14d': '14 дней',
+            'last_28d': '28 дней',
+            'last_30d': '30 дней',
+            'last_90d': '90 дней',
         },
         'Месяцы': {
-            'this_month': '📅 Этот месяц',
-            'last_month': '📅 Прошлый месяц',
+            'this_month': 'Этот месяц',
+            'last_month': 'Прошлый месяц',
         },
         'Недели': {
-            'this_week_mon_today': '📅 Текущая неделя',
-            'last_week_mon_sun': '📅 Прошлая неделя',
+            'this_week_mon_today': 'Текущая неделя',
+            'last_week_mon_sun': 'Прошлая неделя',
         }
     }
     
@@ -241,58 +243,34 @@ def build_date_preset_keyboard(object_id: str, object_type: str, object_name: st
             ))
             button_count += 1
     
-    # Add "Back" button
-    if object_type == 'account':
-        builder.add(InlineKeyboardButton(
-            text="⬅️",
-            callback_data="menu:accounts"
-        ))
-        button_count += 1
-    elif object_type == 'campaign':
-        # Учитываем возможную длину account_id
-        account_id = object_id.split('_')[0] if '_' in object_id else object_id
-        if len(account_id) > 30:
-            account_id = account_id[:30]
-        
-        builder.add(InlineKeyboardButton(
-            text="⬅️",
-            callback_data=f"back:account:{account_id}"
-        ))
-        button_count += 1
+    # Add "Back" button based on object type
+    back_button_data = "menu:accounts"  # Default for accounts
+    if object_type == 'campaign':
+        back_button_data = "menu:campaigns"
     elif object_type == 'ad':
-        # Учитываем возможную длину campaign_id
-        campaign_id = object_id.split('_')[0] if '_' in object_id else object_id
-        if len(campaign_id) > 30:
-            campaign_id = campaign_id[:30]
-            
-        builder.add(InlineKeyboardButton(
-            text="⬅️",
-            callback_data=f"menu:campaign:{campaign_id}"
-        ))
-        button_count += 1
-    elif object_type == 'account_campaigns':
-        # Для таблицы кампаний аккаунта
-        builder.add(InlineKeyboardButton(
-            text="⬅️",
-            callback_data=f"menu:account:{object_id}"
-        ))
-        button_count += 1
+        back_button_data = f"menu:campaign:{object_id.split('_')[0]}"  # Get parent campaign ID
+        
+    builder.add(InlineKeyboardButton(
+        text="⬅️",
+        callback_data=back_button_data
+    ))
+    button_count += 1
     
-    # Добавляем кнопку для возврата в главное меню
+    # Add menu button
     builder.add(InlineKeyboardButton(
         text="🌎 Меню",
         callback_data="menu:main"
     ))
     button_count += 1
     
-    # Проверяем, нужно ли добавить пустую кнопку для сохранения парности
+    # Add empty button if needed for even number
     if button_count % 2 != 0:
         builder.add(InlineKeyboardButton(
-            text=" ",
+            text=" ", 
             callback_data="empty:action"
         ))
     
-    # Build grid - всегда по 2 кнопкам в ряду
+    # Adjust grid layout - 2 buttons per row
     builder.adjust(2)
     
     return builder.as_markup()
@@ -327,26 +305,32 @@ def build_export_format_keyboard(data_key: str):
     
     return builder.as_markup()
 
-def build_main_menu_keyboard():
+def build_main_menu_keyboard(user_role: str = None):
     """
-    Build the main menu keyboard.
+    Build the main menu keyboard based on user role.
     
+    Args:
+        user_role: User role (owner, admin, guest)
+        
     Returns:
         InlineKeyboardMarkup with menu buttons.
     """
     builder = InlineKeyboardBuilder()
     
-    # Main menu buttons
+    # Main menu buttons - доступны всем
     builder.add(InlineKeyboardButton(
         text="📊 Аккаунты",
         callback_data="menu:accounts"
     ))
     
-    builder.add(InlineKeyboardButton(
-        text="🔐 Авторизация",
-        callback_data="menu:auth"
-    ))
+    # Кнопка авторизации только для owner и admin
+    if user_role in ['owner', 'admin']:
+        builder.add(InlineKeyboardButton(
+            text="🔐 Авторизация",
+            callback_data="menu:auth"
+        ))
     
+    # Кнопка языка доступна всем
     builder.add(InlineKeyboardButton(
         text="🪆 Язык",
         callback_data="menu:language"
