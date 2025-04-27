@@ -30,7 +30,6 @@ translations = {
         "error_fetching_stats": "Ошибка при получении статистики",
         "error_fetching_campaigns": "Ошибка при получении кампаний",
         "view_campaigns": "👁 Просмотр кампаний",
-        "view_account_stats": "📊 Статистика аккаунта",
         "export_account_data": "📤 Экспорт данных",
         "account_menu": "Меню аккаунта",
         
@@ -89,7 +88,6 @@ translations = {
         "error_fetching_stats": "Error fetching statistics",
         "error_fetching_campaigns": "Error fetching campaigns",
         "view_campaigns": "👁 View campaigns",
-        "view_account_stats": "📊 Account statistics",
         "export_account_data": "📤 Export data",
         "account_menu": "Account menu",
         
