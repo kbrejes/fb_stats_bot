@@ -7,6 +7,7 @@ import asyncio
 import ssl
 from typing import Dict, List, Any, Optional, Union, Tuple
 from urllib.parse import urlencode
+from datetime import datetime
 
 from config.settings import FB_API_VERSION, DATE_PRESETS
 from src.storage.database import get_session
@@ -32,6 +33,7 @@ class FacebookAdsApiError(Exception):
 class FacebookAdsClient:
     """
     Client for interacting with the Facebook Marketing API.
+    Always uses owner's token for API requests, but respects user's permissions.
     """
     def __init__(self, user_id: int):
         """
@@ -42,35 +44,37 @@ class FacebookAdsClient:
         """
         print(f"DEBUG: Initializing FacebookAdsClient with user_id: {user_id}")
         
-        # Fix for the issue where bot's ID is used instead of user's ID
-        # Make sure we're not using Bot ID (8113924050 in this case)
-        if user_id == 8113924050 or str(user_id) == "8113924050":
-            from src.storage.database import get_session
-            from src.storage.models import User
-            
-            # Try to find a valid user in the database
-            session = get_session()
-            try:
-                # Get the first user with a valid token
-                user = session.query(User).filter(User.telegram_id != 8113924050).first()
-                if user:
-                    print(f"DEBUG: Replacing bot ID with user ID: {user.telegram_id}")
-                    user_id = user.telegram_id
-            except Exception as e:
-                print(f"DEBUG: Error finding alternative user: {str(e)}")
-            finally:
-                session.close()
-        
         self.user_id = user_id
         self.api_version = FB_API_VERSION
         self.base_url = f"https://graph.facebook.com/{self.api_version}"
         
         # We'll load the token when needed
         self._access_token = None
+        self._owner_id = None
+        
+    async def _get_owner_id(self, session) -> Optional[int]:
+        """
+        Get the owner's ID from the database.
+        
+        Args:
+            session: The database session.
+            
+        Returns:
+            The owner's Telegram ID or None if not found.
+        """
+        if self._owner_id:
+            return self._owner_id
+            
+        owner = session.query(User).filter_by(role="owner").first()
+        if owner:
+            self._owner_id = owner.telegram_id
+            return self._owner_id
+        return None
         
     async def _get_access_token(self) -> str:
         """
-        Get the user's access token from the database.
+        Get the access token from the database.
+        Always returns owner's token for all users.
         
         Returns:
             The access token.
@@ -83,51 +87,23 @@ class FacebookAdsClient:
             
         session = get_session()
         try:
-            print(f"DEBUG: Looking for user with ID {self.user_id}")
-            user = session.query(User).filter_by(telegram_id=self.user_id).first()
-            
-            if not user:
-                print(f"DEBUG: User with ID {self.user_id} not found in database!")
+            # Всегда получаем owner'а
+            owner = session.query(User).filter_by(role="owner").first()
+            if not owner:
+                print(f"DEBUG: Owner not found in database!")
+                raise FacebookAdsApiError("Owner not found", "OWNER_NOT_FOUND")
                 
-                # Попытка создать пользователя на лету
-                try:
-                    print(f"DEBUG: Attempting to create user with ID {self.user_id}")
-                    user = User(
-                        telegram_id=self.user_id,
-                        first_name="Auto-created user"
-                    )
-                    session.add(user)
-                    session.commit()
-                    print(f"DEBUG: Successfully created user with ID {self.user_id}")
-                except Exception as e:
-                    print(f"DEBUG: Failed to create user: {str(e)}")
-                    raise FacebookAdsApiError("User not found and could not be created", "USER_NOT_FOUND")
-                    
-                # Повторная попытка получить пользователя
-                user = session.query(User).filter_by(telegram_id=self.user_id).first()
-                if not user:
-                    print(f"DEBUG: User with ID {self.user_id} still not found after creation attempt!")
-                    raise FacebookAdsApiError("User not found", "USER_NOT_FOUND")
+            print(f"DEBUG: Owner found, getting token")
             
-            print(f"DEBUG: User found: {user.telegram_id}, token valid: {user.is_token_valid()}")
-            
-            # BUGFIX: Проверка на повторяющиеся ошибки с токеном
-            # Если у нас есть неудачная попытка доступа с этим токеном, проверим это
-            token = user.get_fb_token()
+            token = owner.get_fb_token()
             if not token:
-                print(f"DEBUG: Token is None for user {user.telegram_id}, raising TOKEN_NOT_SET")
-                raise FacebookAdsApiError("Facebook token is not set", "TOKEN_NOT_SET")
-            
-            # Проверка действительности токена
-            is_token_valid = user.is_token_valid()
-            if not is_token_valid:
-                print(f"DEBUG: Token is invalid for user {user.telegram_id}, raising TOKEN_EXPIRED")
-                raise FacebookAdsApiError("Facebook token is expired or not set", "TOKEN_EXPIRED")
-            
-            print(f"DEBUG: Token is valid and has {len(token)} characters")
-            
+                print(f"DEBUG: Owner's token not found")
+                raise FacebookAdsApiError("Owner's token not found", "TOKEN_NOT_FOUND")
+                
+            print(f"DEBUG: Using owner's token for user {self.user_id}")
             self._access_token = token
             return token
+                
         finally:
             session.close()
             
@@ -279,55 +255,66 @@ class FacebookAdsClient:
         finally:
             session.close()
     
-    async def get_ad_accounts(self) -> List[Dict]:
+    async def get_ad_accounts(self) -> List[Dict[str, Any]]:
         """
-        Get the user's ad accounts.
+        Get available ad accounts.
         
         Returns:
-            List of ad accounts.
+            List of ad account data dictionaries.
         """
-        # Try to get from cache first
-        cache_key = f"ad_accounts:{self.user_id}"
+        print(f"DEBUG: Fetching ad accounts for user {self.user_id}")
         
         session = get_session()
         try:
-            cached_data = Cache.get(session, cache_key)
-            if cached_data:
-                print(f"DEBUG: Using cached ad accounts for user {self.user_id}")
-                return cached_data
-        except Exception as e:
-            logger.error(f"Error checking cache for ad accounts: {str(e)}")
+            # Сначала определяем роль пользователя
+            user = session.query(User).filter_by(telegram_id=self.user_id).first()
+            if not user:
+                raise FacebookAdsApiError("User not found", "USER_NOT_FOUND")
+            
+            # Для всех пользователей используем токен owner'а
+            owner = session.query(User).filter_by(role="owner").first()
+            if not owner:
+                raise FacebookAdsApiError("Owner not found", "OWNER_NOT_FOUND")
+            
+            # Проверяем валидность токена owner'а
+            is_valid = owner.is_token_valid()
+            print(f"DEBUG: Owner's token validation - Current time: {datetime.utcnow().isoformat()}, "
+                  f"Expires: {owner.token_expires_at.isoformat() if owner.token_expires_at else None}, "
+                  f"Valid: {is_valid}")
+            
+            if not is_valid:
+                raise FacebookAdsApiError("Owner's token expired", "TOKEN_EXPIRED")
+            
+            # Получаем токен owner'а
+            token = owner.get_fb_token()
+            if not token:
+                raise FacebookAdsApiError("Owner's token not found", "TOKEN_NOT_FOUND")
+            
+            print(f"DEBUG: Using owner's token for user {self.user_id}")
+            print(f"DEBUG: Token is valid and has {len(token)} characters")
+            
+            # Make the API request
+            url = f"{self.base_url}/me/adaccounts"
+            params = {
+                'fields': 'id,name,account_status,amount_spent,balance,currency,timezone_name,business_country_code',
+                'access_token': token
+            }
+            
+            print(f"DEBUG: Making API request to: {url}?fields={params['fields']}&access_token=REDACTED_TOKEN")
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as response:
+                    if response.status != 200:
+                        error_data = await response.json()
+                        error_message = error_data.get('error', {}).get('message', 'Unknown error')
+                        raise FacebookAdsApiError(f"Failed to get ad accounts: {error_message}", "API_ERROR")
+                    
+                    data = await response.json()
+                    accounts = data.get('data', [])
+                    print(f"DEBUG: Found {len(accounts)} ad accounts for user {self.user_id}")
+                    return accounts
         finally:
             session.close()
-        
-        try:
-            # Get all accounts the user has access to
-            print(f"DEBUG: Fetching ad accounts for user {self.user_id}")
-            response = await self._make_request('me/adaccounts', {
-                'fields': 'id,name,account_status,amount_spent,balance,currency,timezone_name,business_country_code'
-            })
-            
-            if 'data' in response:
-                accounts = response['data']
-                print(f"DEBUG: Found {len(accounts)} ad accounts for user {self.user_id}")
-                
-                # Cache the results
-                try:
-                    session = get_session()
-                    Cache.set(session, cache_key, accounts, 300)  # Cache for 5 minutes
-                except Exception as e:
-                    logger.error(f"Error caching ad accounts: {str(e)}")
-                finally:
-                    session.close()
-                    
-                return accounts
-            else:
-                print(f"DEBUG: No ad accounts data found for user {self.user_id}")
-                return []
-                
-        except FacebookAdsApiError as e:
-            logger.error(f"Error getting ad accounts: {e.message}")
-            raise
             
     async def get_accounts(self) -> Tuple[List[Dict], Optional[str]]:
         """
