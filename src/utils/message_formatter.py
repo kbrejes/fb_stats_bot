@@ -324,6 +324,11 @@ def format_campaign_table(campaigns: List[Dict], insights: List[Dict], date_pres
         ctr = 0
         had_activity = False
         used_conversion_type = "Нет"
+        total_impressions = 0
+        total_clicks = 0
+        total_reach = 0
+        total_spend = 0
+
         
         if campaign_insights:
             # Get currency from first insight

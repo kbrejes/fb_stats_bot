@@ -34,13 +34,6 @@ def build_account_keyboard(accounts: List[Dict], add_stats: bool = False):
         ))
         button_count += 1
         
-        # Add stats button if requested
-        if add_stats:
-            builder.add(InlineKeyboardButton(
-                text="📊 Статистика",
-                callback_data=f"account_stats:{account_id}:{account_name}"
-            ))
-            button_count += 1
     
     # Добавляем кнопку для возврата в главное меню
     builder.add(InlineKeyboardButton(
@@ -341,10 +334,6 @@ def build_main_menu_keyboard():
         callback_data="menu:auth"
     ))
     
-    builder.add(InlineKeyboardButton(
-        text="❓ Помощь",
-        callback_data="menu:help"
-    ))
     
     builder.add(InlineKeyboardButton(
         text="🌐 Язык / Language",

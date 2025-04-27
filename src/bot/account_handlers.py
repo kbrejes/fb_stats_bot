@@ -32,37 +32,56 @@ async def cmd_accounts(message: Message):
         message: The message object.
     """
     user_id = message.from_user.id
-    
-    # Debug output
-    print(f"DEBUG: /accounts command received from user ID: {user_id}")
+    logger.debug(f"[ACCOUNTS] 🚀 Получена команда /accounts от пользователя {user_id}")
     
     # Ensure we're not using the bot ID
     user_id = await fix_user_id(user_id)
     
-    # Check if user exists and has a valid token
-    is_valid, expiration_date = await check_token_validity(user_id)
+    # Проверяем существование пользователя и его роль
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            logger.error(f"[ACCOUNTS] ❌ Пользователь {user_id} не найден в БД")
+            await message.answer(
+                "⚠️ Вы не зарегистрированы в системе. Используйте команду /start для начала работы."
+            )
+            return
+            
+        logger.debug(f"[ACCOUNTS] 👤 Роль пользователя: {user.role}")
+        
+        # Для владельца проверяем валидность токена
+        if user.role == "owner":
+            is_valid, expiration_date = await check_token_validity(user_id)
+            if not is_valid:
+                logger.warning(f"[ACCOUNTS] ⚠️ Невалидный токен у владельца {user_id}")
+                await message.answer(
+                    "⚠️ Ваш токен доступа истек или отсутствует. Пожалуйста, используйте команду /auth для авторизации."
+                )
+                return
+                
+            if expiration_date:
+                logger.debug(f"[ACCOUNTS] 📅 Токен истекает: {expiration_date}")
+    finally:
+        session.close()
     
-    if not is_valid:
-        await message.answer(
-            "⚠️ Ваш токен доступа истек или отсутствует. Пожалуйста, используйте команду /auth для авторизации."
-        )
-        return
-        
-    if expiration_date:
-        print(f"DEBUG: Token expires at: {expiration_date}")
-        
     await message.answer("🔄 Загружаем список ваших рекламных аккаунтов...")
     
     try:
-        fb_client = FacebookAdsClient(user_id)
-        accounts = await fb_client.get_ad_accounts()
+        # Получаем аккаунты через обновленную функцию get_accounts
+        from src.bot.finite_state_machine import get_accounts
+        accounts = await get_accounts(user_id)
         
         if not accounts:
+            logger.warning(f"[ACCOUNTS] ⚠️ Не найдены аккаунты для пользователя {user_id}")
             await message.answer(
                 "⚠️ У вас нет доступных рекламных аккаунтов.\n"
-                "Убедитесь, что ваша учетная запись Facebook имеет доступ к рекламным аккаунтам."
+                "Если вы владелец, убедитесь, что ваша учетная запись Facebook имеет доступ к рекламным аккаунтам.\n"
+                "Если вы пользователь, обратитесь к владельцу для получения доступа к аккаунтам."
             )
             return
+            
+        logger.debug(f"[ACCOUNTS] ✅ Получено {len(accounts)} аккаунтов")
             
         # Создаем клавиатуру с кнопками аккаунтов
         try:
@@ -74,23 +93,14 @@ async def cmd_accounts(message: Message):
                 parse_mode="HTML",
                 reply_markup=keyboard
             )
+            logger.debug(f"[ACCOUNTS] 📱 Отправлена клавиатура с {len(accounts)} аккаунтами")
+            
         except Exception as e:
-            logger.error(f"Error creating account keyboard: {str(e)}")
+            logger.error(f"[ACCOUNTS] ❌ Ошибка при создании клавиатуры: {str(e)}")
             await message.answer(f"⚠️ Ошибка при создании клавиатуры: {str(e)}", parse_mode=None)
                 
-    except FacebookAdsApiError as e:
-        # Handle API errors
-        if e.code == "TOKEN_EXPIRED":
-            await message.answer(
-                "⚠️ Ваш токен доступа истек. Пожалуйста, пройдите авторизацию заново с помощью команды /auth.",
-                parse_mode=None
-            )
-        else:
-            logger.error(f"Facebook API error in accounts: {e.message} (code: {e.code})")
-            await message.answer(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
-            
     except Exception as e:
-        logger.error(f"Unexpected error in accounts: {str(e)}")
+        logger.error(f"[ACCOUNTS] ❌ Неожиданная ошибка: {str(e)}")
         await message.answer(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
 
 

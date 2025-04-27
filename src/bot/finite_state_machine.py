@@ -493,6 +493,7 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
     
     Для остальных пользователей:
     - Возвращает только назначенные им аккаунты из БД
+    - Использует токен owner'а для получения актуальных данных
     
     Args:
         user_id: ID пользователя в Telegram
@@ -512,15 +513,24 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
             
         logger.debug(f"[GET_ACCOUNTS] 👤 Роль пользователя: {user.role}")
         
-        if user.role == "owner":
-            # Для владельца получаем аккаунты из Facebook API
-            try:
-                client = FacebookAdsClient(user_id)
-                accounts = await client.get_ad_accounts()
-                logger.debug(f"[GET_ACCOUNTS] ✅ Получено {len(accounts)} аккаунтов из Facebook API")
-                
-                # Обновляем информацию в БД
-                for account_data in accounts:
+        # Находим owner'а и получаем его ID
+        owner = session.query(User).filter_by(role="owner").first()
+        if not owner:
+            logger.error("[GET_ACCOUNTS] ❌ Owner не найден в БД")
+            return []
+            
+        owner_id = owner.telegram_id
+        logger.debug(f"[GET_ACCOUNTS] 👑 Найден owner с ID: {owner_id}")
+        
+        # Для всех пользователей используем токен owner'а
+        try:
+            client = FacebookAdsClient(owner_id)
+            fb_accounts = await client.get_ad_accounts()
+            logger.debug(f"[GET_ACCOUNTS] ✅ Получено {len(fb_accounts)} аккаунтов из Facebook API")
+            
+            if user.role == "owner":
+                # Для owner'а обновляем все аккаунты в БД
+                for account_data in fb_accounts:
                     account_id = account_data.get('id')
                     account_name = account_data.get('name', f"Аккаунт {account_id}")
                     
@@ -555,24 +565,17 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
                 session.commit()
                 logger.debug("[GET_ACCOUNTS] 💾 Аккаунты успешно сохранены в БД")
                 
-                return accounts
+                return fb_accounts
+            else:
+                # Для обычных пользователей возвращаем только назначенные аккаунты
+                user_accounts = session.query(Account).filter_by(telegram_id=user_id).all()
+                logger.debug(f"[GET_ACCOUNTS] 📋 Найдено {len(user_accounts)} назначенных аккаунтов в БД")
                 
-            except Exception as e:
-                logger.error(f"[GET_ACCOUNTS] ❌ Ошибка при получении аккаунтов из Facebook API: {str(e)}")
-                return []
-        else:
-            # Для обычных пользователей возвращаем только назначенные аккаунты из БД
-            accounts = session.query(Account).filter_by(telegram_id=user_id).all()
-            logger.debug(f"[GET_ACCOUNTS] 📋 Найдено {len(accounts)} назначенных аккаунтов в БД")
-            
-            # Пытаемся получить актуальные данные из Facebook API
-            try:
-                client = FacebookAdsClient(user_id)
-                fb_accounts = await client.get_ad_accounts()
+                # Создаем словарь актуальных данных из Facebook
                 fb_accounts_dict = {acc['id']: acc for acc in fb_accounts}
                 
                 result = []
-                for account in accounts:
+                for account in user_accounts:
                     # Если есть актуальные данные из Facebook, используем их
                     if account.fb_account_id in fb_accounts_dict:
                         fb_data = fb_accounts_dict[account.fb_account_id]
@@ -598,9 +601,11 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
                 session.commit()
                 return result
                 
-            except Exception as e:
-                logger.warning(f"[GET_ACCOUNTS] ⚠️ Не удалось получить актуальные данные из Facebook: {str(e)}")
-                # В случае ошибки возвращаем данные из БД
+        except Exception as e:
+            logger.error(f"[GET_ACCOUNTS] ❌ Ошибка при получении аккаунтов из Facebook API: {str(e)}")
+            if user.role != "owner":
+                # Для обычных пользователей возвращаем данные из БД в случае ошибки
+                accounts = session.query(Account).filter_by(telegram_id=user_id).all()
                 return [
                     {
                         'id': account.fb_account_id,
@@ -610,6 +615,7 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
                     }
                     for account in accounts
                 ]
+            return []
             
     except Exception as e:
         logger.error(f"[GET_ACCOUNTS] ❌ Неожиданная ошибка: {str(e)}")

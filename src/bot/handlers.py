@@ -10,33 +10,18 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandObject
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
 
 from src.bot.keyboards import build_main_menu_keyboard, build_language_keyboard
 from src.utils.languages import set_language, get_language, SUPPORTED_LANGUAGES
 from src.utils.bot_helpers import fix_user_id
 from src.storage.database import get_session
 from src.storage.models import User
+from config.settings import ADMIN_USERS
 
 # Create a router for common handlers
 router = Router()
 logger = logging.getLogger(__name__)
-
-@router.message(Command("start"))
-async def cmd_start(message: Message):
-    """
-    Handle the /start command.
-    
-    Args:
-        message: The message object.
-    """
-    await message.answer(
-        "👋 Привет! Я бот для работы с Facebook Ads.\n\n"
-        "С моей помощью вы можете получать информацию о ваших рекламных аккаунтах, "
-        "кампаниях и объявлениях, а также просматривать статистику.\n\n"
-        "Для начала работы вам необходимо авторизоваться с помощью команды /auth.\n\n"
-        "Используйте /help для получения списка всех доступных команд.",
-        parse_mode="HTML"
-    )
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
@@ -326,4 +311,4 @@ async def process_menu_campaigns_callback(callback: CallbackQuery):
     
     # Import account_handlers to show list of accounts, then user will be able to select account and see campaigns
     from src.bot.account_handlers import cmd_accounts
-    await cmd_accounts(callback.message) 
+    await cmd_accounts(callback.message)
