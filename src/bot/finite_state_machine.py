@@ -59,20 +59,32 @@ async def cmd_start(message: Message, state: FSMContext):
         user = session.query(User).filter_by(telegram_id=user_id).first()
         
         if user:
-            # User exists, show main menu
-            await message.answer(
-                "👋 Добро пожаловать в бот для управления рекламой Facebook!\n\n"
-                "Используйте меню ниже для навигации:",
-                reply_markup=build_main_menu_keyboard(user.role)
-            )
+            # User already exists, show appropriate message based on role
+            if user.role == "owner":
+                await message.answer(
+                    "✅ Вы уже зарегистрированы как владелец.\n"
+                    "Используйте меню для работы с ботом:",
+                    reply_markup=build_main_menu_keyboard(user.role)
+                )
+            else:
+                # Get user's account names
+                accounts = session.query(Account).filter_by(telegram_id=user_id).all()
+                account_names = [acc.name or acc.fb_account_id for acc in accounts]
+                accounts_str = "\n• ".join(account_names) if account_names else "нет привязанных аккаунтов"
+                
+                await message.answer(
+                    f"✅ Вы уже зарегистрированы в системе\n\n"
+                    f"Ваша роль: {user.role}\n"
+                    f"Доступные аккаунты:\n• {accounts_str}\n\n"
+                    f"Используйте меню для работы с ботом:",
+                    reply_markup=build_main_menu_keyboard(user.role)
+                )
             return
         
-        # New user
-        await message.answer(
-            "👋 Спасибо за обращение!\n\n"
-            "Наша команда уже знает о вашем запросе и скоро предоставит вам "
-            "доступ к просмотру статистики ваших рекламных кампаний.\n\n"
-            "Пожалуйста, ожидайте."
+        # New user registration process
+        welcome_message = await message.answer(
+            "Добро пожаловать в Лови Лидов Бот 🫶 \n\n"
+            "Скоро мы выдадим вам доступ к вашей статистике 🕑"
         )
         
         # Save user data in state
@@ -82,7 +94,9 @@ async def cmd_start(message: Message, state: FSMContext):
             'first_name': message.from_user.first_name,
             'last_name': message.from_user.last_name,
             'full_name': message.from_user.full_name,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': datetime.utcnow().isoformat(),
+            'welcome_message_id': welcome_message.message_id,
+            'welcome_chat_id': welcome_message.chat.id
         }
         
         # Notify admins about new user
@@ -441,18 +455,32 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
             session.commit()
             
             # Отправляем сообщение пользователю
-            await callback.bot.send_message(
-                user_id,
-                "✅ Вам предоставлен доступ к рекламному аккаунту Facebook!\n"
-                "Теперь вы можете использовать все функции бота."
-            )
-            
-            # Обновляем сообщение админу
-            account_display_name = account_name or fb_account_id
-            await callback.message.edit_text(
-                f"✅ Пользователю {new_user_data['full_name']} успешно предоставлен доступ к аккаунту "
-                f"{account_display_name} с ролью {role}."
-            )
+            try:
+                # Пытаемся удалить приветственное сообщение
+                welcome_message_id = new_user_data.get('welcome_message_id')
+                welcome_chat_id = new_user_data.get('welcome_chat_id')
+                if welcome_message_id and welcome_chat_id:
+                    try:
+                        await callback.bot.delete_message(welcome_chat_id, welcome_message_id)
+                    except Exception as e:
+                        logger.warning(f"Could not delete welcome message: {str(e)}")
+                
+                # Отправляем новое сообщение с доступом
+                await callback.bot.send_message(
+                    user_id,
+                    "✅ Вам предоставлен доступ к статистике вашей рекламы в Instagram и Facebook. "
+                    "Перейдите в \"Аккаунты\", чтобы увидеть её.",
+                    reply_markup=build_main_menu_keyboard(role)
+                )
+                
+                # Обновляем сообщение админу
+                account_display_name = account_name or fb_account_id
+                await callback.message.edit_text(
+                    f"✅ Пользователю {new_user_data['full_name']} успешно предоставлен доступ к аккаунту "
+                    f"{account_display_name} с ролью {role}."
+                )
+            except Exception as e:
+                logger.error(f"Error sending messages after role assignment: {str(e)}")
             
         except Exception as e:
             logger.error(f"[ROLE_SELECTION] ❌ Ошибка при создании записей в БД: {str(e)}")
@@ -802,34 +830,37 @@ async def cmd_list_users(message: Message):
             await message.answer("❌ У вас нет прав для просмотра списка пользователей.")
             return
         
-        # Get all users with their accounts
-        users_accounts = (
-            session.query(User, Account)
-            .join(Account, User.telegram_id == Account.user_id)
-            .all()
-        )
+        # Get all users first
+        users = session.query(User).all()
         
-        if not users_accounts:
+        if not users:
             await message.answer("ℹ️ Пользователи не найдены.")
             return
         
         # Format user list
         user_list = []
-        current_user = None
-        for user, account in users_accounts:
-            if current_user != user.telegram_id:
-                current_user = user.telegram_id
-                user_list.append(f"\n👤 {user.username or user.first_name} (ID: {user.telegram_id})")
-                user_list.append(f"📊 Роль: {user.role}")
-                user_list.append("📁 Аккаунты:")
+        for user in users:
+            # Add user info
+            user_list.append(f"\n👤 {user.username or user.first_name} (ID: {user.telegram_id})")
+            user_list.append(f"📊 Роль: {user.role}")
             
-            # Truncate long account names
-            account_name = account.name[:27] + "..." if len(account.name) > 30 else account.name
-            user_list.append(f"   • {account_name} (ID: {account.id})")
+            # Get accounts for this user
+            accounts = session.query(Account).filter_by(telegram_id=user.telegram_id).all()
+            
+            if accounts:
+                user_list.append("📁 Аккаунты:")
+                for account in accounts:
+                    # Truncate long account names
+                    account_name = account.name[:27] + "..." if account.name and len(account.name) > 30 else account.name or "Без имени"
+                    user_list.append(f"   • {account_name} (ID: {account.fb_account_id})")
+            else:
+                user_list.append("📁 Нет привязанных аккаунтов")
         
+        # Send the formatted list
         await message.answer("\n".join(user_list))
         
     except Exception as e:
+        logger.error(f"Error in list_users: {str(e)}")
         await message.answer(
             "❌ Произошла ошибка при получении списка пользователей. Пожалуйста, попробуйте позже."
         )
