@@ -715,13 +715,13 @@ async def account_menu_callback(callback: CallbackQuery):
     
     # Back to accounts list button
     builder.add(InlineKeyboardButton(
-        text=get_text("back_to_accounts", lang),
+        text="⬅️",
         callback_data="menu:accounts"
     ))
     
     # Main menu button
     builder.add(InlineKeyboardButton(
-        text=get_text("main_menu", lang),
+        text="🌎 Меню",
         callback_data="menu:main"
     ))
     

@@ -37,7 +37,7 @@ def build_account_keyboard(accounts: List[Dict], add_stats: bool = False):
     
     # Добавляем кнопку для возврата в главное меню
     builder.add(InlineKeyboardButton(
-        text="🏠 Главное меню",
+        text="🌎 Меню",
         callback_data="menu:main"
     ))
     button_count += 1
@@ -92,14 +92,14 @@ def build_campaign_keyboard(campaigns: List[Dict], add_stats: bool = False):
     
     # Add "Back to accounts" button
     builder.add(InlineKeyboardButton(
-        text="↩️ Назад к аккаунтам",
+        text="⬅️",
         callback_data="menu:accounts"
     ))
     button_count += 1
     
     # Добавляем кнопку для возврата в главное меню
     builder.add(InlineKeyboardButton(
-        text="🏠 Главное меню",
+        text="🌎 Меню",
         callback_data="menu:main"
     ))
     button_count += 1
@@ -153,16 +153,16 @@ def build_ad_keyboard(ads: List[Dict], campaign_id: str, add_stats: bool = False
             ))
             button_count += 1
     
-    # Add "Back to campaign" button - использовать меню вместо back
+    # Add "Back to campaign" button
     builder.add(InlineKeyboardButton(
-        text="↩️ Назад к кампании",
+        text="⬅️",
         callback_data=f"menu:campaign:{campaign_id}"
     ))
     button_count += 1
     
     # Добавляем кнопку для возврата в главное меню
     builder.add(InlineKeyboardButton(
-        text="🏠 Главное меню",
+        text="🌎 Меню",
         callback_data="menu:main"
     ))
     button_count += 1
@@ -194,44 +194,57 @@ def build_date_preset_keyboard(object_id: str, object_type: str, object_name: st
     builder = InlineKeyboardBuilder()
     button_count = 0
     
-    # Friendly names for date presets
-    date_labels = {
-        'today': 'Сегодня',
-        'yesterday': 'Вчера',
-        'last_3d': 'Последние 3 дня',
-        'last_7d': 'Последние 7 дней',
-        'last_30d': 'Последние 30 дней',
-        'this_month': 'Текущий месяц',
-        'last_month': 'Прошлый месяц'
+    # Группируем пресеты дат по категориям для лучшей навигации
+    date_groups = {
+        'Сегодня/Вчера': {
+            'today': '📅 Сегодня',
+            'yesterday': '📅 Вчера',
+        },
+        'Последние дни': {
+            'last_3d': '📅 3 дня',
+            'last_7d': '📅 7 дней',
+            'last_14d': '📅 14 дней',
+            'last_30d': '📅 30 дней',
+        },
+        'Месяцы': {
+            'this_month': '📅 Этот месяц',
+            'last_month': '📅 Прошлый месяц',
+        },
+        'Недели': {
+            'this_week_mon_today': '📅 Текущая неделя',
+            'last_week_mon_sun': '📅 Прошлая неделя',
+        }
     }
     
     # ВАЖНЫЙ FIX: Telegram имеет ограничение в 64 байта для callback_data
     # Для решения проблемы BUTTON_DATA_INVALID полностью убираем имя объекта из callback_data
     # Вместо этого будем использовать только ID и тип
-    for preset, value in DATE_PRESETS.items():
-        # Используем минимальный callback_data без имени объекта
-        callback_data = f"stats:{object_type}:{object_id}:{preset}"
-        
-        # Проверяем длину callback_data
-        if len(callback_data) > 64:
-            # Если даже без имени объекта длина превышает 64 байта, создаем укороченную версию
-            # Эта ситуация может возникнуть, если object_id очень длинный
-            id_part = object_id
-            if len(id_part) > 30:  # Оставляем запас для остальной части callback_data
-                id_part = id_part[:30]
+    
+    # Добавляем кнопки по группам
+    for group_name, presets in date_groups.items():
+        for preset, label in presets.items():
+            # Используем минимальный callback_data без имени объекта
+            callback_data = f"stats:{object_type}:{object_id}:{preset}"
             
-            callback_data = f"stats:{object_type}:{id_part}:{preset}"
-            
-        builder.add(InlineKeyboardButton(
-            text=date_labels.get(preset, preset),
-            callback_data=callback_data
-        ))
-        button_count += 1
+            # Проверяем длину callback_data
+            if len(callback_data) > 64:
+                # Если даже без имени объекта длина превышает 64 байта, создаем укороченную версию
+                id_part = object_id
+                if len(id_part) > 30:  # Оставляем запас для остальной части callback_data
+                    id_part = id_part[:30]
+                
+                callback_data = f"stats:{object_type}:{id_part}:{preset}"
+                
+            builder.add(InlineKeyboardButton(
+                text=label,
+                callback_data=callback_data
+            ))
+            button_count += 1
     
     # Add "Back" button
     if object_type == 'account':
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к аккаунтам",
+            text="⬅️",
             callback_data="menu:accounts"
         ))
         button_count += 1
@@ -242,7 +255,7 @@ def build_date_preset_keyboard(object_id: str, object_type: str, object_name: st
             account_id = account_id[:30]
         
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к кампаниям",
+            text="⬅️",
             callback_data=f"back:account:{account_id}"
         ))
         button_count += 1
@@ -253,21 +266,21 @@ def build_date_preset_keyboard(object_id: str, object_type: str, object_name: st
             campaign_id = campaign_id[:30]
             
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к объявлениям",
+            text="⬅️",
             callback_data=f"menu:campaign:{campaign_id}"
         ))
         button_count += 1
     elif object_type == 'account_campaigns':
         # Для таблицы кампаний аккаунта
         builder.add(InlineKeyboardButton(
-            text="↩️ Назад к аккаунту",
+            text="⬅️",
             callback_data=f"menu:account:{object_id}"
         ))
         button_count += 1
     
     # Добавляем кнопку для возврата в главное меню
     builder.add(InlineKeyboardButton(
-        text="🏠 Главное меню",
+        text="🌎 Меню",
         callback_data="menu:main"
     ))
     button_count += 1
@@ -305,7 +318,7 @@ def build_export_format_keyboard(data_key: str):
     
     # Back button
     builder.add(InlineKeyboardButton(
-        text="↩️ Отмена",
+        text="⬅️",
         callback_data="back:cancel"
     ))
     
@@ -334,9 +347,8 @@ def build_main_menu_keyboard():
         callback_data="menu:auth"
     ))
     
-    
     builder.add(InlineKeyboardButton(
-        text="🌐 Язык / Language",
+        text="🪆 Язык",
         callback_data="menu:language"
     ))
     
@@ -366,7 +378,7 @@ def build_confirmation_keyboard(action: str, object_id: str):
     
     # Cancel button
     builder.add(InlineKeyboardButton(
-        text="❌ Отмена",
+        text="⬅️",
         callback_data="back:cancel"
     ))
     
@@ -397,7 +409,7 @@ def build_language_keyboard():
     
     # Add back button
     builder.add(InlineKeyboardButton(
-        text="↩️ Назад / Back",
+        text="⬅️",
         callback_data="menu:main"
     ))
     
