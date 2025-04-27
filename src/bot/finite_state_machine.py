@@ -19,6 +19,9 @@ from src.storage.models import User, Account, Permission
 from src.utils.logger import get_logger
 from src.api.facebook import FacebookAdsClient
 from config.settings import ADMIN_USERS
+from src.bot.keyboards import build_main_menu_keyboard
+from src.utils.bot_helpers import fix_user_id
+from src.utils.languages import get_language
 
 logger = get_logger(__name__)
 
@@ -32,41 +35,47 @@ class NewUserStates(StatesGroup):
     selecting_account = State()  # Выбор аккаунта для пользователя
     selecting_role = State()  # Выбор роли для пользователя
 
+# Define states
+class UserStates(StatesGroup):
+    selecting_role = State()
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     """
     Handle the /start command.
+    
+    Args:
+        message: The message object.
+        state: The FSM context.
     """
-    user_id = message.from_user.id
-    logger.info(f"[START] 🚀 Получена команда /start от пользователя {user_id}")
-    logger.debug(f"[START] Данные пользователя: username={message.from_user.username}, "
-                f"first_name={message.from_user.first_name}, last_name={message.from_user.last_name}")
+    user_id = await fix_user_id(message.from_user.id)
     
-    await message.answer(
-        "👋 Привет! Я бот для работы с Facebook Ads.\n\n"
-        "С моей помощью вы можете получать информацию о ваших рекламных аккаунтах, "
-        "кампаниях и объявлениях, а также просматривать статистику.\n\n"
-        "Для начала работы вам необходимо авторизоваться с помощью команды /auth.\n\n"
-        "Используйте /help для получения списка всех доступных команд.",
-        parse_mode="HTML"
-    )
+    # Get user's language
+    lang = get_language(user_id)
     
-    # Если пользователь не является админом, начинаем процесс регистрации
-    if user_id not in ADMIN_USERS:
-        admin_id = 400133981  # ID админа
-        logger.info(f"[START] 👤 Пользователь {user_id} не является админом, начинаем процесс регистрации")
+    session = get_session()
+    try:
+        # Check if user exists in database
+        user = session.query(User).filter_by(telegram_id=user_id).first()
         
-        # Создаем состояние для пользователя
-        user_key = StorageKey(
-            bot_id=message.bot.id,
-            chat_id=user_id,
-            user_id=user_id
+        if user:
+            # User exists, show main menu
+            await message.answer(
+                "👋 Добро пожаловать в бот для управления рекламой Facebook!\n\n"
+                "Используйте меню ниже для навигации:",
+                reply_markup=build_main_menu_keyboard(user.role)
+            )
+            return
+        
+        # New user
+        await message.answer(
+            "👋 Спасибо за обращение!\n\n"
+            "Наша команда уже знает о вашем запросе и скоро предоставит вам "
+            "доступ к просмотру статистики ваших рекламных кампаний.\n\n"
+            "Пожалуйста, ожидайте."
         )
-        user_state = FSMContext(storage=state.storage, key=user_key)
-        logger.debug(f"[START] 🔑 Создан state для пользователя с ключом: {user_key}")
         
-        # Сохраняем информацию о пользователе в state
+        # Save user data in state
         user_data = {
             'telegram_id': user_id,
             'username': message.from_user.username,
@@ -75,30 +84,54 @@ async def cmd_start(message: Message, state: FSMContext):
             'full_name': message.from_user.full_name,
             'created_at': datetime.utcnow().isoformat()
         }
-        await user_state.set_state(NewUserStates.waiting_for_admin)
-        current_state = await user_state.get_state()
-        logger.debug(f"[START] 📝 Установлено состояние: {current_state}")
         
-        await user_state.update_data(new_user_data=user_data)
-        logger.debug(f"[START] 💾 Сохранены данные пользователя: {user_data}")
+        # Notify admins about new user
+        admin_users = session.query(User).filter(User.role.in_(["owner", "admin"])).all()
+        admin_message = (
+            f"📱 Новый запрос на доступ:\n"
+            f"👤 {message.from_user.full_name}\n"
+            f"🆔 {user_id}\n"
+            f"Username: @{message.from_user.username or 'отсутствует'}"
+        )
         
-        # Создаем клавиатуру для подтверждения
+        # Create keyboard for admin actions
         builder = InlineKeyboardBuilder()
-        builder.add(InlineKeyboardButton(text="Принять", callback_data=f"new_user:accept:{user_id}"))
-        builder.add(InlineKeyboardButton(text="Отклонить", callback_data=f"new_user:reject:{user_id}"))
+        builder.add(InlineKeyboardButton(
+            text="✅ Принять",
+            callback_data=f"new_user:accept:{user_id}"
+        ))
+        builder.add(InlineKeyboardButton(
+            text="❌ Отклонить",
+            callback_data=f"new_user:reject:{user_id}"
+        ))
         builder.adjust(2)
         
-        # Отправляем уведомление админу
-        await message.bot.send_message(
-            admin_id,
-            f"🔔 Новый пользователь!\n\n"
-            f"ID: {user_id}\n"
-            f"Имя: {message.from_user.full_name}\n"
-            f"Username: @{message.from_user.username or 'отсутствует'}\n\n"
-            f"Что делаем с пользователем?",
-            reply_markup=builder.as_markup()
-        )
-        logger.info(f"[START] 📨 Отправлено уведомление админу {admin_id} о новом пользователе {user_id}")
+        for admin in admin_users:
+            try:
+                # Set state for the new user
+                new_key = StorageKey(
+                    bot_id=message.bot.id,
+                    chat_id=user_id,
+                    user_id=user_id
+                )
+                new_state = FSMContext(storage=state.storage, key=new_key)
+                await new_state.set_state(NewUserStates.waiting_for_admin)
+                await new_state.update_data(new_user_data=user_data)
+                
+                # Send message to admin with buttons
+                await message.bot.send_message(
+                    admin.telegram_id,
+                    admin_message,
+                    reply_markup=builder.as_markup()
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify admin {admin.telegram_id}: {e}")
+                
+    except Exception as e:
+        logger.error(f"Error in start command: {e}")
+        await message.answer("❌ Произошла ошибка. Пожалуйста, попробуйте позже.")
+    finally:
+        session.close()
 
 @router.callback_query(F.data.startswith("new_user:"))
 async def process_new_user_action(callback: CallbackQuery, state: FSMContext):
@@ -337,16 +370,10 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
             user_id=user_id
         )
         user_state = FSMContext(storage=state.storage, key=new_key)
-        logger.debug(f"[ROLE_SELECTION] 🔑 Создан state пользователя с ключом: {new_key}")
         
         # Проверяем текущее состояние
         current_state = await user_state.get_state()
-        logger.debug(f"[ROLE_SELECTION] 📊 Текущее состояние: {current_state}")
-        logger.debug(f"[ROLE_SELECTION] 📊 Ожидаемое состояние: {NewUserStates.selecting_role.state}")
-        
         if current_state != NewUserStates.selecting_role.state:
-            logger.error(f"[ROLE_SELECTION] ❌ Несоответствие состояния. Текущее: {current_state}, "
-                        f"Ожидаемое: {NewUserStates.selecting_role.state}")
             await callback.answer("❌ Ошибка: неверное состояние процесса назначения роли.", show_alert=True)
             return
         
@@ -354,17 +381,12 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
         state_data = await user_state.get_data()
         new_user_data = state_data.get('new_user_data')
         fb_account_id = state_data.get('selected_account_id')
-        logger.debug(f"[ROLE_SELECTION] 📝 Получены данные пользователя: {new_user_data}")
-        logger.debug(f"[ROLE_SELECTION] 📝 ID выбранного аккаунта FB: {fb_account_id}")
         
         if not new_user_data or new_user_data['telegram_id'] != user_id:
-            logger.error(f"[ROLE_SELECTION] ❌ Несоответствие данных пользователя. "
-                        f"Ожидаемый user_id: {user_id}, Полученные данные: {new_user_data}")
             await callback.message.edit_text("❌ Ошибка: данные пользователя не найдены или не совпадают.")
             return
         
         if role == "cancel":
-            logger.info(f"[ROLE_SELECTION] ❌ Выбор роли отменен для пользователя {user_id}")
             await callback.message.edit_text(
                 f"❌ Назначение роли пользователю {new_user_data['full_name']} отменено."
             )
@@ -393,12 +415,10 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
                 client = FacebookAdsClient(admin_id)
                 fb_accounts = await client.get_ad_accounts()
                 account_name = next((acc['name'] for acc in fb_accounts if acc['id'] == fb_account_id), None)
-                logger.debug(f"[ROLE_SELECTION] 📝 Получено название аккаунта: {account_name}")
             except Exception as e:
                 logger.error(f"[ROLE_SELECTION] ❌ Ошибка при получении названия аккаунта: {str(e)}")
             
             # Создаем нового пользователя
-            logger.info(f"[ROLE_SELECTION] 📝 Создание записи пользователя в БД. User: {user_id}, Role: {role}")
             user = User(
                 telegram_id=user_id,
                 username=new_user_data['username'],
@@ -408,23 +428,7 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
                 created_at=datetime.fromisoformat(new_user_data['created_at'])
             )
             session.add(user)
-            
-            # Делаем commit для сохранения пользователя
             session.commit()
-            logger.debug(f"[ROLE_SELECTION] ✅ Пользователь успешно создан в БД")
-            
-            # Удаляем существующие дубликаты аккаунтов, если они есть
-            existing_accounts = session.query(Account).filter_by(
-                telegram_id=user_id,
-                fb_account_id=fb_account_id
-            ).all()
-            
-            if existing_accounts:
-                logger.warning(f"[ROLE_SELECTION] ⚠️ Найдены дубликаты аккаунта {fb_account_id} для пользователя {user_id}")
-                for acc in existing_accounts:
-                    session.delete(acc)
-                session.commit()
-                logger.debug(f"[ROLE_SELECTION] 🗑 Удалены дубликаты аккаунта {fb_account_id}")
             
             # Создаем запись в таблице accounts
             account = Account(
@@ -434,19 +438,7 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
                 created_at=datetime.utcnow()
             )
             session.add(account)
-            
-            # Делаем commit для сохранения аккаунта
             session.commit()
-            logger.debug(f"[ROLE_SELECTION] ✅ Аккаунт успешно создан в БД")
-            
-            # Проверяем, что все создалось
-            check_user = session.query(User).filter_by(telegram_id=user_id).first()
-            check_account = session.query(Account).filter_by(telegram_id=user_id, fb_account_id=fb_account_id).first()
-            
-            if not check_user or not check_account:
-                raise Exception("Ошибка при создании записей в базе данных")
-            
-            logger.info(f"[ROLE_SELECTION] 💾 Успешно сохранены записи пользователя и аккаунта в БД")
             
             # Отправляем сообщение пользователю
             await callback.bot.send_message(
@@ -454,34 +446,84 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
                 "✅ Вам предоставлен доступ к рекламному аккаунту Facebook!\n"
                 "Теперь вы можете использовать все функции бота."
             )
-            logger.debug(f"[ROLE_SELECTION] 📨 Отправлено уведомление пользователю {user_id} о предоставлении доступа")
             
-            # Обновляем сообщение админу с названием аккаунта
+            # Обновляем сообщение админу
             account_display_name = account_name or fb_account_id
             await callback.message.edit_text(
                 f"✅ Пользователю {new_user_data['full_name']} успешно предоставлен доступ к аккаунту "
                 f"{account_display_name} с ролью {role}."
             )
-            logger.info(f"[ROLE_SELECTION] 📨 Отправлено подтверждение админу о завершении регистрации")
             
         except Exception as e:
             logger.error(f"[ROLE_SELECTION] ❌ Ошибка при создании записей в БД: {str(e)}")
-            await callback.message.edit_text(
-                f"❌ Ошибка при создании пользователя: {str(e)}"
-            )
+            await callback.message.edit_text(f"❌ Ошибка при создании пользователя: {str(e)}")
             if session:
                 session.rollback()
         finally:
             if session:
                 session.close()
             await callback.answer()
-            logger.debug(f"[ROLE_SELECTION] ✅ Обработка выбора роли завершена")
-            # Очищаем состояние в любом случае
             await user_state.clear()
-            logger.debug(f"[ROLE_SELECTION] 🗑 State пользователя очищен")
+            
     except Exception as e:
         logger.error(f"[ROLE_SELECTION] ❌ Ошибка при обработке выбора роли: {str(e)}")
         await callback.answer("❌ Ошибка при обработке выбора роли. Пожалуйста, попробуйте позже.")
+
+@router.message(UserStates.selecting_role)
+async def process_role_selection(message: Message, state: FSMContext):
+    """
+    Process user's role selection.
+    
+    Args:
+        message: The message object.
+        state: The FSM context.
+    """
+    user_id = await fix_user_id(message.from_user.id)
+    role_map = {"1": "owner", "2": "admin", "3": "targetologist"}
+    
+    if message.text not in role_map:
+        await message.answer(
+            "❌ Пожалуйста, отправьте только номер роли (1, 2 или 3)."
+        )
+        return
+    
+    role = role_map[message.text]
+    
+    try:
+        session = get_session()
+        # Create new user
+        user = User(
+            telegram_id=user_id,
+            username=message.from_user.username,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name,
+            role=role
+        )
+        session.add(user)
+        await session.flush()
+        
+        # Create default account for the user
+        account = Account(
+            user_id=user_id,
+            name="Default Account",
+            is_active=True
+        )
+        session.add(account)
+        await session.commit()
+        
+        # Clear state and show main menu
+        await state.clear()
+        await message.answer(
+            f"✅ Ваша роль установлена: {role}\n\n"
+            "Используйте меню ниже для навигации:",
+            reply_markup=build_main_menu_keyboard(role)
+        )
+        
+    except Exception as e:
+        await message.answer(
+            "❌ Произошла ошибка при сохранении данных. Пожалуйста, попробуйте позже."
+        )
+        await state.clear()
 
 async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
     """
@@ -745,98 +787,51 @@ async def cmd_delete_role(message: Message):
 @router.message(Command("list_users"))
 async def cmd_list_users(message: Message):
     """
-    Показывает список всех пользователей с их ролями.
-    Доступно только для админов.
-    """
-    user_id = message.from_user.id
-    logger.info(f"[LIST_USERS] 📋 Получена команда /list_users от пользователя {user_id}")
+    List all users with their roles and accounts.
     
-    # Проверяем, является ли пользователь админом
-    if user_id not in ADMIN_USERS:
-        logger.warning(f"[LIST_USERS] ⚠️ Попытка просмотра списка пользователей от неадмина: {user_id}")
-        await message.answer("❌ У вас нет прав для выполнения этой команды.")
-        return
+    Args:
+        message: The message object.
+    """
+    user_id = await fix_user_id(message.from_user.id)
     
     session = get_session()
     try:
-        # Получаем всех пользователей из БД
-        users = session.query(User).all()
-        logger.debug(f"[LIST_USERS] 📊 Найдено пользователей в БД: {len(users)}")
-        for user in users:
-            logger.debug(f"[LIST_USERS] 👤 Пользователь: ID={user.telegram_id}, "
-                       f"Username={user.username}, Role={user.role}")
-        
-        if not users:
-            await message.answer("ℹ️ В базе данных нет зарегистрированных пользователей.")
+        # Check if user is admin or owner
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user or user.role not in ["owner", "admin"]:
+            await message.answer("❌ У вас нет прав для просмотра списка пользователей.")
             return
         
-        # Получаем актуальные данные аккаунтов для owner
-        owner_accounts = {}
-        try:
-            owner_id = next((user.telegram_id for user in users if user.role == "owner"), None)
-            if owner_id:
-                client = FacebookAdsClient(owner_id)
-                fb_accounts = await client.get_ad_accounts()
-                owner_accounts = {acc['id']: acc['name'] for acc in fb_accounts}
-                logger.debug(f"[LIST_USERS] 📊 Получены актуальные данные аккаунтов: {owner_accounts}")
-        except Exception as e:
-            logger.error(f"[LIST_USERS] ❌ Ошибка при получении актуальных данных аккаунтов: {str(e)}")
+        # Get all users with their accounts
+        users_accounts = (
+            session.query(User, Account)
+            .join(Account, User.telegram_id == Account.user_id)
+            .all()
+        )
         
-        # Формируем сообщение со списком пользователей
-        response = "📋 Список пользователей:\n\n"
-        for user in users:
-            # Получаем аккаунты пользователя
-            accounts = session.query(Account).filter_by(telegram_id=user.telegram_id).all()
-            logger.debug(f"[LIST_USERS] 📊 Найдено {len(accounts)} аккаунтов для пользователя {user.telegram_id}")
-            
-            account_info = []
-            for acc in accounts:
-                # Используем актуальное название из Facebook API или сохраненное в БД
-                name = owner_accounts.get(acc.fb_account_id) or acc.name or f"Аккаунт {acc.fb_account_id}"
-                account_info.append(name)
-                logger.debug(f"[LIST_USERS] 📝 Аккаунт {acc.fb_account_id}: {name}")
-                
-                # Обновляем название в БД, если оно изменилось
-                if acc.fb_account_id in owner_accounts and acc.name != owner_accounts[acc.fb_account_id]:
-                    acc.name = owner_accounts[acc.fb_account_id]
-                    acc.updated_at = datetime.utcnow()
-                    logger.debug(f"[LIST_USERS] 🔄 Обновлено название аккаунта {acc.fb_account_id}")
-            
-            # Формируем строку с информацией о пользователе
-            user_info = (
-                f"👤 {user.first_name or ''} {user.last_name or ''}\n"
-                f"ID: {user.telegram_id}\n"
-                f"Username: @{user.username or 'отсутствует'}\n"
-                f"Роль: {user.role or 'не назначена'}\n"
-            )
-            
-            # Добавляем список аккаунтов
-            if account_info:
-                user_info += "Аккаунты FB:\n" + "\n".join(account_info)
-            else:
-                user_info += "Аккаунты FB: нет"
-                
-            # Добавляем дату создания и пустую строку для разделения пользователей
-            user_info += f"\nСоздан: {user.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            
-            response += user_info
+        if not users_accounts:
+            await message.answer("ℹ️ Пользователи не найдены.")
+            return
         
-        # Сохраняем обновленные названия
-        session.commit()
-        logger.debug("[LIST_USERS] 💾 Изменения сохранены в БД")
-        
-        # Отправляем сообщение частями, если оно слишком длинное
-        if len(response) > 4096:
-            for i in range(0, len(response), 4096):
-                await message.answer(response[i:i+4096])
-        else:
-            await message.answer(response)
+        # Format user list
+        user_list = []
+        current_user = None
+        for user, account in users_accounts:
+            if current_user != user.telegram_id:
+                current_user = user.telegram_id
+                user_list.append(f"\n👤 {user.username or user.first_name} (ID: {user.telegram_id})")
+                user_list.append(f"📊 Роль: {user.role}")
+                user_list.append("📁 Аккаунты:")
             
-        logger.info(f"[LIST_USERS] ✅ Отправлен список из {len(users)} пользователей")
+            # Truncate long account names
+            account_name = account.name[:27] + "..." if len(account.name) > 30 else account.name
+            user_list.append(f"   • {account_name} (ID: {account.id})")
+        
+        await message.answer("\n".join(user_list))
         
     except Exception as e:
-        logger.error(f"[LIST_USERS] ❌ Ошибка при получении списка пользователей: {str(e)}")
-        await message.answer(f"❌ Произошла ошибка при получении списка пользователей: {str(e)}")
+        await message.answer(
+            "❌ Произошла ошибка при получении списка пользователей. Пожалуйста, попробуйте позже."
+        )
     finally:
         session.close()
-        logger.debug(f"[LIST_USERS] 🗑 Сессия БД закрыта")
