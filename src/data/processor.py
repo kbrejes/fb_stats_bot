@@ -3,7 +3,7 @@ Process and format data for display in Telegram.
 """
 import pandas as pd
 from typing import Dict, List, Any, Optional, Union
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.utils.logger import get_logger
 
@@ -130,75 +130,104 @@ class DataProcessor:
                              for ad in ads])
     
     @staticmethod
-    def format_insights(insights: List[Dict], level: str = 'campaign') -> str:
+    def format_insights(insights: List[Dict], account_name: str = "Без имени") -> Optional[str]:
         """
-        Format insights data into a text table.
+        Форматирует данные инсайтов в новый формат уведомлений.
         
         Args:
-            insights: List of insights data.
-            level: The level of insights (account, campaign, adset, ad).
+            insights: Список инсайтов
+            account_name: Название аккаунта
             
         Returns:
-            Formatted text table.
+            Отформатированный текст уведомления или None если нет данных
         """
         if not insights:
-            return "Нет доступных данных статистики"
+            return None
         
-        # Extract key metrics
-        metrics = ['date_start', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'spend']
-        
-        rows = []
-        for entry in insights:
-            row = {}
-            for metric in metrics:
-                if metric in entry:
-                    # Format numbers
-                    value = entry[metric]
-                    if metric in ['impressions', 'reach', 'clicks']:
-                        value = f"{int(value):,}".replace(',', ' ')
-                    elif metric in ['ctr']:
-                        value = f"{float(value)*100:.2f}%"
-                    elif metric in ['cpc', 'spend']:
-                        value = f"{float(value):.2f}"
-                    elif metric in ['date_start']:
-                        try:
-                            dt = datetime.strptime(value, '%Y-%m-%d')
-                            value = dt.strftime('%d.%m.%Y')
-                        except ValueError:
-                            pass
-                    
-                    row[metric] = value
+        # Получаем даты из первого инсайта
+        try:
+            date_start = insights[0].get('date_start')
+            date_stop = insights[0].get('date_stop')
             
-            rows.append(row)
+            if not date_start or not date_stop:
+                return None
+                
+            start_date = datetime.strptime(date_start, '%Y-%m-%d')
+            end_date = datetime.strptime(date_stop, '%Y-%m-%d')
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse dates for account {account_name}: {str(e)}")
+            return None
         
-        if not rows:
-            return "Данные статистики не содержат необходимых метрик"
-        
-        # Create DataFrame
-        df = pd.DataFrame(rows)
-        
-        # Rename columns
-        column_names = {
-            'date_start': 'Дата',
-            'impressions': 'Показы',
-            'reach': 'Охват',
-            'clicks': 'Клики',
-            'ctr': 'CTR',
-            'cpc': 'CPC',
-            'spend': 'Расходы'
+        # Словарь русских названий месяцев
+        MONTHS = {
+            1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля',
+            5: 'мая', 6: 'июня', 7: 'июля', 8: 'августа',
+            9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'
         }
         
-        df.rename(columns=column_names, inplace=True)
+        # Форматируем даты
+        start_str = f"{start_date.day} {MONTHS[start_date.month]} {start_date.year}"
+        end_str = f"{end_date.day} {MONTHS[end_date.month]} {end_date.year}"
         
-        # Format as text table
-        header = " | ".join(df.columns)
-        separator = "-" * len(header)
+        # Суммируем метрики
+        total_spend = sum(float(i.get('spend', 0)) for i in insights)
+        total_reach = sum(float(i.get('reach', 0)) for i in insights)
+        total_clicks = sum(float(i.get('clicks', 0)) for i in insights)
+        total_impressions = sum(float(i.get('impressions', 0)) for i in insights)
         
-        rows = []
-        for _, row in df.iterrows():
-            rows.append(" | ".join(map(str, row)))
+        # Рассчитываем CTR
+        ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
         
-        return f"{header}\n{separator}\n" + "\n".join(rows)
+        # Рассчитываем CPC
+        cpc = total_spend / total_clicks if total_clicks > 0 else 0
+        
+        # Собираем информацию о конверсиях
+        conversions = 0
+        conversion_type = None
+        conversion_cost = None
+        
+        # Сначала собираем все конверсии
+        for insight in insights:
+            for conversion in insight.get('conversions', []):
+                if conversion.get('action_type', '').startswith('offsite_conversion.fb_pixel_custom'):
+                    conversions += float(conversion.get('value', 0))
+                    conversion_type = conversion.get('action_type')
+        
+        # Если нашли конверсии, ищем их стоимость
+        if conversion_type and conversions > 0:
+            # Сначала пытаемся найти стоимость в cost_per_action_type
+            for insight in insights:
+                for cost in insight.get('cost_per_action_type', []):
+                    if cost.get('action_type') == conversion_type:
+                        if conversion_cost is None:
+                            conversion_cost = float(cost.get('value', 0))
+                        else:
+                            conversion_cost = (conversion_cost + float(cost.get('value', 0))) / 2
+            
+            # Если стоимость не найдена в cost_per_action_type, рассчитываем вручную
+            if conversion_cost is None and total_spend > 0:
+                conversion_cost = total_spend / conversions
+                logger.info(f"Calculated manual conversion cost for {account_name}: {conversion_cost} (spend: {total_spend}, conversions: {conversions})")
+        
+        # Если нет данных о конверсиях, возвращаем None
+        if not conversion_type or conversions == 0:
+            return None
+            
+        # Форматируем сообщение
+        message = [
+            f"📊 Статистика по аккаунту {account_name} за период {start_str} - {end_str}:",
+            "",
+            f"Конверсий: {int(conversions)}",
+            f"Тип конверсий: {conversion_type}",
+            f"Цена конверсии: ${conversion_cost:.2f}" if conversion_cost is not None else "Цена конверсии: н/д",
+            f"Спенд: ${total_spend:.2f}",
+            f"Охват: {int(total_reach):,}".replace(",", " "),
+            f"Клики: {int(total_clicks):,}".replace(",", " "),
+            f"CTR: {ctr:.2f}%",
+            f"CPC: ${cpc:.2f}"
+        ]
+        
+        return "\n".join(message)
     
     @staticmethod
     def truncate_for_telegram(text: str, max_length: int = 4000) -> List[str]:
