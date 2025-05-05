@@ -17,6 +17,9 @@ from src.bot.account_handlers import router as account_router
 from src.bot.campaign_handlers import router as campaign_router
 from src.bot.ad_handlers import router as ad_router
 from src.bot.auth_handlers import router as auth_router
+from src.bot.finite_state_machine import router as fsm_router
+from src.bot.notification_handlers import router as notification_router
+from src.services.notifications import NotificationService
 from src.utils.logger import setup_logging
 
 # Configure logging
@@ -34,22 +37,37 @@ dp.include_router(account_router)  # Account-related handlers
 dp.include_router(campaign_router)  # Campaign-related handlers
 dp.include_router(ad_router)  # Ad-related handlers
 dp.include_router(auth_router)  # Auth-related handlers
+dp.include_router(fsm_router)  # FSM router
+dp.include_router(notification_router)  # Notification handlers
 
+async def shutdown():
+    """Корректное завершение работы бота."""
+    logger.info("Shutting down...")
+    
+    # Останавливаем планировщик уведомлений
+    await NotificationService.shutdown()
+    
+    # Закрываем соединение с ботом
+    await bot.session.close()
+    
+    logger.info("Shutdown complete")
 
 async def main():
     """
     Main function to start the bot.
     """
-    # Setup logging
-    setup_logging()
-    
-    # Initialize the database
-    init_db()
-    
-    # Start the bot
-    logger.info("Starting Facebook Ads Telegram Bot")
-    await dp.start_polling(bot)
-
+    try:
+        # Setup logging
+        setup_logging()
+        
+        # Initialize the database
+        init_db()
+        
+        # Start the bot
+        logger.info("Starting Facebook Ads Telegram Bot")
+        await dp.start_polling(bot)
+    finally:
+        await shutdown()
 
 if __name__ == "__main__":
     try:
