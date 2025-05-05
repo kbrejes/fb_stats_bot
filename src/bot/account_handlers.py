@@ -18,6 +18,7 @@ from src.storage.models import User
 from src.data.processor import DataProcessor
 from src.utils.bot_helpers import fix_user_id, check_token_validity
 from src.bot.keyboards import build_account_keyboard, build_date_preset_keyboard
+from src.bot.common import process_campaigns_list
 
 # Create a router for account handlers
 router = Router()
@@ -178,16 +179,13 @@ async def process_account_callback(callback: CallbackQuery):
     except Exception as e:
         print(f"DEBUG: Error updating message in account callback: {str(e)}")
     
-    # We need to import this here to avoid circular imports
-    from src.bot.campaign_handlers import process_campaigns
-    
     # Process campaigns for the selected account
-    print(f"DEBUG: Calling process_campaigns for account {account_id} and user {user_id}")
+    print(f"DEBUG: Processing campaigns for account {account_id} and user {user_id}")
     try:
-        await process_campaigns(callback, account_id, user_id)
+        await process_campaigns_list(callback, account_id, user_id)
         print(f"DEBUG: Successfully processed campaigns for account {account_id}")
     except Exception as e:
-        print(f"DEBUG: Error in process_campaigns: {str(e)}")
+        print(f"DEBUG: Error processing campaigns: {str(e)}")
         
         # Создаем клавиатуру для возврата при ошибке
         builder = InlineKeyboardBuilder()
@@ -214,7 +212,7 @@ async def process_account_callback(callback: CallbackQuery):
         builder.adjust(2)
         
         await callback.message.edit_text(
-            f"⚠️ Ошибка при загрузке кампаний: {str(e)}", 
+            f"⚠️ Ошибка при загрузке кампаний: {str(e)}",
             parse_mode=None,
             reply_markup=builder.as_markup()
         ) 

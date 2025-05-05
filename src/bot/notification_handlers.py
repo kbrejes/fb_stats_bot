@@ -81,8 +81,7 @@ def format_notification_settings(settings: Optional[NotificationSettings]) -> st
     return (
         "<b>Настройки уведомлений:</b>\n\n"
         f"{status}\n\n"
-        f"Время получения сводки: {notification_time}\n"
-        f"Часовой пояс: {timezone_display}\n\n"
+        f"Сводка приходит в {notification_time} ({timezone_display})\n\n"
     )
 
 def build_notification_keyboard(enabled: bool = True) -> InlineKeyboardBuilder:
@@ -231,10 +230,12 @@ async def notification_callback(callback: CallbackQuery, state: FSMContext):
         elif action == "set_time":
             # Переходим в состояние ожидания времени
             await state.set_state(NotificationStates.waiting_for_time)
-            await callback.message.edit_text(
-                "🕑 Во сколько вы хотите получать сводку по статистике?\n\nВведите время в формате ЧЧ:ММ\n\n"
-                "Например: 16:20"
+            # Отправляем сообщение и сохраняем его ID
+            msg = await callback.message.edit_text(
+                "🕑 Во сколько вы хотите получать сводку по статистике?\n\nВведите время в формате ЧЧ:ММ, например: 16:20"
             )
+            # Сохраняем ID сообщения в состоянии
+            await state.update_data(prev_message_id=msg.message_id)
             return
             
         elif action == "set_timezone":
@@ -355,8 +356,21 @@ async def process_notification_time(message: Message, state: FSMContext):
             settings.notification_types if settings else None  # Используем текущие типы уведомлений или None для значений по умолчанию
         )
         
-        # Сбрасываем состояние
+        # Получаем ID предыдущего сообщения из состояния
+        data = await state.get_data()
+        prev_message_id = data.get('prev_message_id')
+        
+        # Сбрасываем состояние ПОСЛЕ получения данных
         await state.clear()
+        
+        # Если есть предыдущее сообщение, удаляем его
+        if prev_message_id:
+            try:
+                await message.bot.delete_message(message.chat.id, prev_message_id)
+                # Удаляем также сообщение пользователя с временем
+                await message.delete()
+            except Exception as e:
+                logger.error(f"Error deleting messages: {str(e)}")
         
         # Отправляем обновленные настройки
         message_text = format_notification_settings(settings)

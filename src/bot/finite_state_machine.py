@@ -4,7 +4,7 @@ This module implements a multi-step conversation with state tracking.
 """
 import logging
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, time
 
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
@@ -16,7 +16,7 @@ from aiogram.fsm.storage.base import StorageKey
 from config.settings import OWNER_ID
 
 from src.storage.database import get_session
-from src.storage.models import User, Account
+from src.storage.models import User, Account, NotificationSettings, accounts_to_users
 from src.utils.logger import get_logger
 from src.api.facebook import FacebookAdsClient
 from config.settings import ADMIN_USERS
@@ -24,6 +24,7 @@ from src.bot.keyboards import build_main_menu_keyboard
 from src.utils.bot_helpers import fix_user_id
 from src.utils.languages import get_language
 from src.utils.permissions import get_available_roles, is_valid_role, Role, has_permission, Permission
+from src.services.notifications import NotificationService
 
 logger = get_logger(__name__)
 
@@ -76,9 +77,7 @@ async def cmd_start(message: Message, state: FSMContext):
                 
                 await message.answer(
                     f"✅ Вы уже зарегистрированы в системе\n\n"
-                    f"Ваша роль: {user.role}\n"
-                    f"Доступные аккаунты:\n• {accounts_str}\n\n"
-                    f"Используйте меню для работы с ботом:",
+                    f"Доступные аккаунты:\n• {accounts_str}\n\n",
                     reply_markup=build_main_menu_keyboard(user.role)
                 )
             return
@@ -443,7 +442,6 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
                 created_at=datetime.fromisoformat(new_user_data['created_at'])
             )
             session.add(user)
-            session.commit()
             
             # Создаем запись в таблице accounts
             account = Account(
@@ -453,7 +451,38 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
                 created_at=datetime.utcnow()
             )
             session.add(account)
+            session.flush()  # Получаем ID нового аккаунта
+            
+            # Проверяем существование связи перед добавлением
+            exists = session.query(accounts_to_users).filter_by(
+                user_id=user_id,
+                account_id=account.id
+            ).first()
+            
+            if not exists:
+                # Добавляем связь в accounts_to_users через relationship
+                user.shared_accounts.append(account)
+            
+            # Создаем настройки уведомлений по умолчанию
+            notification_settings = NotificationSettings(
+                user_id=user_id,
+                notification_time=time(hour=10, minute=0),  # Уведомления в 10:00
+                timezone="UTC",  # По умолчанию UTC
+                enabled=True,
+                notification_types={
+                    'daily_stats': True,
+                    'performance_alerts': True,
+                    'budget_alerts': True
+                }
+            )
+            session.add(notification_settings)
+            
+            # Коммитим все изменения одной транзакцией
             session.commit()
+            
+            # Создаем задачу для отправки уведомлений
+            notification_service = NotificationService(session)
+            await notification_service._schedule_user_notifications(notification_settings)
             
             # Отправляем сообщение пользователю
             try:
@@ -469,8 +498,9 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
                 # Отправляем новое сообщение с доступом
                 await callback.bot.send_message(
                     user_id,
-                    "✅ Вам предоставлен доступ к статистике вашей рекламы в Instagram и Facebook. "
-                    "Перейдите в \"Аккаунты\", чтобы увидеть её.",
+                    "✅ Вам предоставлен доступ к статистике вашей рекламы в Instagram и Facebook.\n"
+                    "📊 Уведомления настроены на 10:00 UTC ежедневно.\n"
+                    "⚙️ Вы можете изменить время и настройки уведомлений в меню.",
                     reply_markup=build_main_menu_keyboard(role)
                 )
                 
@@ -582,8 +612,8 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
                 
                 return fb_accounts
             else:
-                # Для обычных пользователей возвращаем только назначенные аккаунты
-                user_accounts = session.query(Account).filter_by(telegram_id=user_id).all()
+                # Для обычных пользователей возвращаем только назначенные аккаунты через shared_accounts
+                user_accounts = user.shared_accounts
                 logger.debug(f"[GET_ACCOUNTS] 📋 Найдено {len(user_accounts)} назначенных аккаунтов в БД")
                 
                 # Создаем словарь актуальных данных из Facebook
@@ -620,7 +650,6 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
             logger.error(f"[GET_ACCOUNTS] ❌ Ошибка при получении аккаунтов из Facebook API: {str(e)}")
             if user.role != "owner":
                 # Для обычных пользователей возвращаем данные из БД в случае ошибки
-                accounts = session.query(Account).filter_by(telegram_id=user_id).all()
                 return [
                     {
                         'id': account.fb_account_id,
@@ -628,7 +657,7 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
                         'currency': account.currency,
                         'timezone_name': account.timezone_name
                     }
-                    for account in accounts
+                    for account in user.shared_accounts
                 ]
             return []
             

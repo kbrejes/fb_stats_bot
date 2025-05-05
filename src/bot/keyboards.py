@@ -308,42 +308,64 @@ def build_export_format_keyboard(data_key: str):
 
 def build_main_menu_keyboard(user_role: str = None):
     """
-    Build the main menu keyboard based on user role.
+    Build the main menu keyboard.
     
     Args:
-        user_role: User role (owner, admin, guest)
+        user_role: The user's role.
         
     Returns:
-        InlineKeyboardMarkup with menu buttons.
+        Main menu keyboard.
     """
     builder = InlineKeyboardBuilder()
+    button_count = 0
     
-    # Main menu buttons - доступны всем
-    builder.add(InlineKeyboardButton(
-        text="🗿 Аккаунты",
-        callback_data="menu:accounts"
-    ))
+    # Accounts button
+    if has_permission(user_role, Permission.VIEW_STATISTICS):
+        builder.add(InlineKeyboardButton(
+            text="🗿 Аккаунты",
+            callback_data="menu:accounts"
+        ))
+        button_count += 1
     
-    # Кнопка уведомлений доступна всем
-    builder.add(InlineKeyboardButton(
-        text="🧴 Уведомления",
-        callback_data="menu:notifications"
-    ))
+    # Analytics button
+    if has_permission(user_role, Permission.VIEW_STATISTICS):
+        builder.add(InlineKeyboardButton(
+            text="📈 Аналитика",
+            callback_data="analytics:menu"
+        ))
+        button_count += 1
     
-    # Кнопка авторизации только для тех, у кого есть права на управление пользователями
-    if user_role and has_permission(user_role, Permission.MANAGE_USERS.value):
+    # Notifications button
+    if has_permission(user_role, Permission.MANAGE_NOTIFICATIONS):
+        builder.add(InlineKeyboardButton(
+            text="🧴 Уведомления",
+            callback_data="menu:notifications"
+        ))
+        button_count += 1
+    
+    # Auth button
+    if has_permission(user_role, Permission.MANAGE_USERS):
         builder.add(InlineKeyboardButton(
             text="🪓 Авторизация",
             callback_data="menu:auth"
         ))
+        button_count += 1
     
-    # Кнопка языка доступна всем
+    # Language button
     builder.add(InlineKeyboardButton(
         text="🪆 Язык",
         callback_data="menu:language"
     ))
+    button_count += 1
     
-    # Build grid with 2 buttons per row
+    # Add empty button if needed for even number
+    if button_count % 2 != 0:
+        builder.add(InlineKeyboardButton(
+            text=" ",
+            callback_data="empty:action"
+        ))
+    
+    # Adjust grid to 2 buttons per row
     builder.adjust(2)
     
     return builder.as_markup()

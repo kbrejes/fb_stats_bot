@@ -548,27 +548,45 @@ class FacebookAdsClient:
         finally:
             session.close()
             
-    async def get_insights(self, object_id: str, date_preset: str = 'last_7d',
-                         fields: Optional[List[str]] = None, 
-                         level: str = 'campaign') -> List[Dict]:
+    async def get_insights(
+        self,
+        object_id: str,
+        date_preset: Optional[str] = 'last_7d',
+        fields: Optional[List[str]] = None,
+        level: str = 'campaign',
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> List[Dict]:
         """
         Get insights (statistics) for an object.
         
         Args:
             object_id: The object ID (ad account, campaign, ad set, or ad).
-            date_preset: The date range preset.
+            date_preset: The date range preset. Если указаны start_date и end_date, игнорируется.
             fields: List of insight fields to return.
             level: The level of insight data (account, campaign, adset, ad).
+            start_date: Начальная дата для кастомного периода
+            end_date: Конечная дата для кастомного периода
             
         Returns:
             List of insights.
         """
-        # Map our internal date preset keys to Facebook's values
-        facebook_date_preset = DATE_PRESETS.get(date_preset)
-        if not facebook_date_preset:
-            logger.warning(f"Invalid date preset '{date_preset}', defaulting to 'last_7_days'")
-            date_preset = 'last_7d'
+        # Определяем параметры дат
+        if start_date and end_date:
+            date_params = {
+                'time_range': {
+                    'since': start_date.strftime('%Y-%m-%d'),
+                    'until': end_date.strftime('%Y-%m-%d')
+                }
+            }
+        else:
+            # Map our internal date preset keys to Facebook's values
             facebook_date_preset = DATE_PRESETS.get(date_preset)
+            if not facebook_date_preset:
+                logger.warning(f"Invalid date preset '{date_preset}', defaulting to 'last_7_days'")
+                date_preset = 'last_7d'
+                facebook_date_preset = DATE_PRESETS.get(date_preset)
+            date_params = {'date_preset': facebook_date_preset}
             
         if not fields:
             # Расширенный набор полей для получения подробной информации о кастомных конверсиях
@@ -584,6 +602,8 @@ class FacebookAdsClient:
             ]
             
         cache_key = f"insights:{self.user_id}:{object_id}:{date_preset}:{level}"
+        if start_date and end_date:
+            cache_key = f"insights:{self.user_id}:{object_id}:{start_date.strftime('%Y-%m-%d')}_{end_date.strftime('%Y-%m-%d')}:{level}"
         
         # Try to get from cache first
         session = get_session()
@@ -596,9 +616,9 @@ class FacebookAdsClient:
             params = {
                 'fields': ','.join(fields),
                 'level': level,
-                'date_preset': facebook_date_preset,
                 'time_increment': 1  # Получаем данные по дням для правильных дат
             }
+            params.update(date_params)
             
             print(f"DEBUG: Insights request params: {params}")
             
@@ -671,18 +691,32 @@ class FacebookAdsClient:
         finally:
             session.close()
             
-    async def get_account_insights(self, account_id: str, date_preset: str = 'last_7d') -> List[Dict]:
+    async def get_account_insights(
+        self,
+        account_id: str,
+        date_preset: Optional[str] = 'last_7d',
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> List[Dict]:
         """
         Get insights for an ad account.
         
         Args:
             account_id: The ad account ID.
             date_preset: The date range preset.
+            start_date: Начальная дата для кастомного периода
+            end_date: Конечная дата для кастомного периода
             
         Returns:
             Account insights.
         """
-        return await self.get_insights(account_id, date_preset, level='account')
+        return await self.get_insights(
+            account_id,
+            date_preset=date_preset,
+            level='account',
+            start_date=start_date,
+            end_date=end_date
+        )
         
     async def get_campaign_insights(self, campaign_id: str, date_preset: str = 'last_7d') -> List[Dict]:
         """

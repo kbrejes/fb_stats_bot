@@ -2,7 +2,7 @@
 Process and format data for display in Telegram.
 """
 import pandas as pd
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Tuple
 from datetime import datetime, timedelta
 import random
 
@@ -245,42 +245,255 @@ class DataProcessor:
         return "\n".join(message)
     
     @staticmethod
-    def truncate_for_telegram(text: str, max_length: int = 4000) -> List[str]:
+    def _get_overall_trend(metrics: Dict[str, Tuple[float, str]]) -> str:
         """
-        Truncate text to fit Telegram message limits.
+        Анализирует динамику эффективности на основе стоимости конверсии.
         
         Args:
-            text: The text to truncate.
-            max_length: Maximum length of a message.
+            metrics: Словарь с метриками и их изменениями
             
         Returns:
-            List of message parts.
+            Строка с описанием динамики эффективности
+        """
+        # Получаем изменение стоимости конверсии
+        conversion_cost_change, direction = metrics.get('conversion_cost', (0.0, '='))
+        
+        # Если стоимость конверсии снизилась (↓), это позитивно
+        if direction == '↓':
+            return "🟢 Рост эффективности"
+        # Если стоимость конверсии выросла (↑), это негативно
+        elif direction == '↑':
+            return "🔴 Снижение эффективности"
+        
+        # Если нет изменений
+        return "⚪️ Стабильная эффективность"
+
+    @staticmethod
+    def get_metrics(insights: List[Dict], normalize_by_days: bool = False, days_count: Optional[int] = None) -> Dict[str, float]:
+        """
+        Извлекает и обрабатывает метрики из инсайтов.
+        
+        Args:
+            insights: Список инсайтов
+            normalize_by_days: Нужно ли нормализовать значения по дням
+            days_count: Количество дней для нормализации (если None, вычисляется автоматически)
+            
+        Returns:
+            Словарь с обработанными метриками
+        """
+        # Инициализируем базовые метрики
+        total_spend = 0
+        total_reach = 0
+        total_clicks = 0
+        total_impressions = 0
+        total_conversions = 0
+        
+        # Собираем данные из всех инсайтов
+        for insight in insights:
+            total_spend += float(insight.get('spend', 0))
+            total_reach += float(insight.get('reach', 0))
+            total_clicks += float(insight.get('clicks', 0))
+            total_impressions += float(insight.get('impressions', 0))
+            
+            # Обрабатываем конверсии
+            for conversion in insight.get('conversions', []):
+                action_type = conversion.get('action_type', '')
+                # Сначала проверяем кастомные конверсии
+                if action_type.startswith('offsite_conversion.fb_pixel_custom.'):
+                    total_conversions += float(conversion.get('value', 0))
+                # Затем проверяем стандартные лиды
+                elif action_type in ['lead', 'offsite_conversion.fb_pixel_lead']:
+                    total_conversions += float(conversion.get('value', 0))
+        
+        # Если нужно нормализовать значения по дням
+        if normalize_by_days and insights:
+            if days_count is None:
+                # Вычисляем количество дней
+                start_date = datetime.strptime(insights[0]['date_start'], '%Y-%m-%d')
+                end_date = datetime.strptime(insights[0]['date_stop'], '%Y-%m-%d')
+                days_count = (end_date - start_date).days + 1
+            
+            if days_count > 0:
+                total_spend /= days_count
+                total_reach /= days_count
+                total_clicks /= days_count
+                total_impressions /= days_count
+                total_conversions /= days_count
+        
+        # Вычисляем производные метрики
+        ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
+        cpc = total_spend / total_clicks if total_clicks > 0 else 0
+        conversion_cost = total_spend / total_conversions if total_conversions > 0 else 0
+        
+        # Возвращаем словарь с метриками
+        return {
+            'spend': total_spend,
+            'reach': total_reach,
+            'clicks': total_clicks,
+            'impressions': total_impressions,
+            'conversions': total_conversions,
+            'ctr': ctr,
+            'cpc': cpc,
+            'conversion_cost': conversion_cost
+        }
+
+    @staticmethod
+    def format_comparative_insights(
+        current_insights: List[Dict],
+        previous_insights: List[Dict],
+        account_name: str = "Без имени",
+        show_details: bool = True,
+        normalize_by_days: bool = False,
+        period_type: str = "daily"
+    ) -> Optional[str]:
+        """
+        Форматирует сравнительную статистику между двумя периодами.
+        
+        Args:
+            current_insights: Статистика текущего периода
+            previous_insights: Статистика предыдущего периода
+            account_name: Название аккаунта
+            show_details: Показывать ли детальную статистику
+            normalize_by_days: Нужно ли нормализовать значения по дням
+            period_type: Тип периода (daily, weekly, monthly)
+            
+        Returns:
+            Отформатированный текст сравнения или None если нет данных
+        """
+        if not current_insights or not previous_insights:
+            return None
+            
+        # Получаем даты из инсайтов
+        try:
+            current_start = datetime.strptime(current_insights[0]['date_start'], '%Y-%m-%d')
+            current_end = datetime.strptime(current_insights[0]['date_stop'], '%Y-%m-%d')
+            previous_start = datetime.strptime(previous_insights[0]['date_start'], '%Y-%m-%d')
+            previous_end = datetime.strptime(previous_insights[0]['date_stop'], '%Y-%m-%d')
+            
+            current_days = (current_end - current_start).days + 1
+            previous_days = (previous_end - previous_start).days + 1
+        except (KeyError, IndexError, ValueError):
+            return None
+            
+        # Получаем метрики
+        current_metrics = DataProcessor.get_metrics(current_insights, normalize_by_days, current_days)
+        previous_metrics = DataProcessor.get_metrics(previous_insights, normalize_by_days, previous_days)
+        
+        # Вычисляем изменения и сохраняем их для анализа общей динамики
+        metrics_changes = {}
+        for metric in ['conversions', 'conversion_cost', 'spend', 'reach', 'clicks', 'ctr', 'cpc']:
+            change, direction = DataProcessor.calc_change(
+                current_metrics[metric],
+                previous_metrics[metric]
+            )
+            metrics_changes[metric] = (change, direction)
+        
+        # Получаем общую динамику
+        overall_trend = DataProcessor._get_overall_trend(metrics_changes)
+        
+        # Определяем заголовок в зависимости от типа периода
+        period_headers = {
+            'daily': '📉  Дневка',
+            'weekly': '📉  Неделька',
+            'monthly': '📉  Месяц'
+        }
+        period_header = period_headers.get(period_type, '📊 Анализ периода')
+
+        # Получаем эмодзи для тренда
+        trend_emoji = "🦍" if "Рост" in overall_trend else "💩"
+        trend_text = "лид подешевел" if "Рост" in overall_trend else "лид подорожал"
+        
+        # Форматируем даты в новом формате
+        def format_date(date: datetime) -> str:
+            return f"{date.day:02d}/{date.month:02d}"
+
+        # Форматируем строку с датами в зависимости от типа периода
+        if period_type == 'daily':
+            # Для быстрых изменений показываем только дни
+            date_str = f"{format_date(previous_start)} vs {format_date(current_start)}"
+        else:
+            # Для остальных периодов показываем диапазоны
+            date_str = f"{format_date(previous_start)}-{format_date(previous_end)} vs {format_date(current_start)}-{format_date(current_end)}"
+        
+        # Формируем сообщение
+        message = [
+            f"{period_header}: {trend_text} {trend_emoji}",
+            f"{date_str}\n",
+        ]
+        
+        # Добавляем метрики
+        message.extend([
+            f"Конверсии: {previous_metrics['conversions']:.1f} → {current_metrics['conversions']:.1f} {metrics_changes['conversions'][1]} {metrics_changes['conversions'][0]:.1f}%",
+            f"Цена конверсии: ${previous_metrics['conversion_cost']:.2f} → ${current_metrics['conversion_cost']:.2f} {metrics_changes['conversion_cost'][1]} {metrics_changes['conversion_cost'][0]:.1f}%",
+            f"Расход: ${previous_metrics['spend']:.2f} → ${current_metrics['spend']:.2f} {metrics_changes['spend'][1]} {metrics_changes['spend'][0]:.1f}%"
+        ])
+        
+        return "\n".join(message)
+    
+    @staticmethod
+    def truncate_for_telegram(text: str, max_length: int = 4000) -> List[str]:
+        """
+        Разбивает длинный текст на части с учетом HTML-разметки.
+        
+        Args:
+            text: Исходный текст
+            max_length: Максимальная длина одного сообщения
+            
+        Returns:
+            Список частей текста
         """
         if len(text) <= max_length:
             return [text]
         
-        # Split by lines to avoid cutting in the middle of a row
+        parts = []
+        current_part = ""
+        current_tags = []  # Стек открытых HTML тегов
+        
+        # Разбиваем текст на строки
         lines = text.split('\n')
         
-        parts = []
-        current_part = []
-        current_length = 0
-        
         for line in lines:
-            if current_length + len(line) + 1 > max_length:  # +1 for the newline
-                # Current part is full, add it to parts and start a new one
-                if current_part:
-                    parts.append('\n'.join(current_part))
-                current_part = [line]
-                current_length = len(line)
-            else:
-                # Add line to the current part
-                current_part.append(line)
-                current_length += len(line) + 1  # +1 for the newline
-        
-        # Don't forget the last part
+            # Если текущая строка содержит открывающий тег, добавляем его в стек
+            if '<b>' in line:
+                current_tags.append('<b>')
+            if '<i>' in line:
+                current_tags.append('<i>')
+            if '<code>' in line:
+                current_tags.append('<code>')
+                
+            # Если добавление строки превысит лимит
+            if len(current_part + line + '\n') > max_length:
+                # Закрываем все открытые теги
+                for tag in reversed(current_tags):
+                    if tag == '<b>':
+                        current_part += '</b>'
+                    elif tag == '<i>':
+                        current_part += '</i>'
+                    elif tag == '<code>':
+                        current_part += '</code>'
+                
+                # Добавляем часть в результат
+                parts.append(current_part)
+                
+                # Начинаем новую часть, открывая все необходимые теги
+                current_part = ""
+                for tag in current_tags:
+                    current_part += tag
+                    
+            # Добавляем строку к текущей части
+            current_part += line + '\n'
+            
+            # Если строка содержит закрывающий тег, удаляем его из стека
+            if '</b>' in line:
+                current_tags.remove('<b>')
+            if '</i>' in line:
+                current_tags.remove('<i>')
+            if '</code>' in line:
+                current_tags.remove('<code>')
+                
+        # Добавляем последнюю часть
         if current_part:
-            parts.append('\n'.join(current_part))
+            parts.append(current_part)
         
         return parts
     
@@ -313,3 +526,25 @@ class DataProcessor:
                 logger.warning(f"Failed to convert dates: {str(e)}")
         
         return df 
+
+    @staticmethod
+    def calc_change(current_value: float, previous_value: float) -> Tuple[float, str]:
+        """
+        Вычисляет процентное изменение между двумя значениями и определяет направление изменения.
+        
+        Args:
+            current_value: Текущее значение
+            previous_value: Предыдущее значение
+            
+        Returns:
+            Кортеж из процента изменения и символа направления (↑ или ↓)
+        """
+        if previous_value == 0:
+            if current_value == 0:
+                return 0.0, "="
+            return 100.0, "↑"
+            
+        change = ((current_value - previous_value) / previous_value) * 100
+        direction = "↑" if change >= 0 else "↓"
+        
+        return abs(change), direction 

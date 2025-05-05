@@ -34,14 +34,17 @@ ROLE_PERMISSIONS: Dict[Role, Set[Permission]] = {
         Permission.MANAGE_USERS,
         Permission.VIEW_STATISTICS,
         Permission.EXPORT_DATA,
-        Permission.VIEW_ADMIN_PANEL
+        Permission.VIEW_ADMIN_PANEL,
+        Permission.MANAGE_NOTIFICATIONS
     },
     Role.TARGETOLOGIST: {
         Permission.VIEW_STATISTICS,
-        Permission.EXPORT_DATA
+        Permission.EXPORT_DATA,
+        Permission.MANAGE_NOTIFICATIONS
     },
     Role.PARTNER: {
-        Permission.VIEW_STATISTICS
+        Permission.VIEW_STATISTICS,
+        Permission.MANAGE_NOTIFICATIONS
     }
 }
 

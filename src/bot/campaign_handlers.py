@@ -17,6 +17,7 @@ from src.utils.bot_helpers import fix_user_id, check_token_validity
 from src.bot.keyboards import build_campaign_keyboard
 from src.storage.database import get_session
 from src.storage.models import User
+from src.bot.common import process_ads_list
 
 # Create a router for campaign handlers
 router = Router()
@@ -189,52 +190,24 @@ async def process_campaign_callback(callback: CallbackQuery):
     except Exception as e:
         print(f"DEBUG: Error updating message in campaign callback: {str(e)}")
     
-    # We need to import this here to avoid circular imports
-    from src.bot.ad_handlers import process_ads
-    
-    # Save the campaign_id in the user's context
-    session = get_session()
-    try:
-        user = session.query(User).filter_by(telegram_id=user_id).first()
-        if user:
-            # Get existing context
-            context = user.get_context()
-            # Update with current campaign_id
-            context['current_campaign_id'] = campaign_id
-            # Save updated context
-            user.set_context(context)
-            session.commit()
-            print(f"DEBUG: Saved campaign_id {campaign_id} in context for user {user_id}")
-    except Exception as e:
-        print(f"DEBUG: Error saving campaign_id in context: {str(e)}")
-        session.rollback()
-    finally:
-        session.close()
-    
     # Process ads for the selected campaign
     try:
-        await process_ads(callback, campaign_id, user_id)
+        await process_ads_list(callback, campaign_id, user_id)
     except Exception as e:
-        print(f"DEBUG: Error in process_ads: {str(e)}")
+        print(f"DEBUG: Error processing ads: {str(e)}")
         
         # Создаем клавиатуру для возврата при ошибке
         builder = InlineKeyboardBuilder()
         button_count = 0
         
         builder.add(InlineKeyboardButton(
-            text="⬅️",
+            text="↩️ Назад к кампаниям",
             callback_data="menu:campaigns"
         ))
         button_count += 1
         
         builder.add(InlineKeyboardButton(
-            text="⬅️",
-            callback_data="menu:accounts"
-        ))
-        button_count += 1
-        
-        builder.add(InlineKeyboardButton(
-            text="🌎 Меню",
+            text="🏠 Главное меню",
             callback_data="menu:main"
         ))
         button_count += 1

@@ -54,11 +54,32 @@ async def cmd_menu(message: Message):
     Args:
         message: The message object.
     """
-    await message.answer(
-        "<b>Меню:</b>",
-        parse_mode="HTML",
-        reply_markup=build_main_menu_keyboard()
-    )
+    user_id = await fix_user_id(message.from_user.id)
+    session = get_session()
+    
+    try:
+        # Получаем пользователя и его роль
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            await message.answer(
+                "⚠️ Пользователь не найден. Используйте /start для начала работы.",
+                parse_mode="HTML"
+            )
+            return
+            
+        await message.answer(
+            "<b>Меню:</b>",
+            parse_mode="HTML",
+            reply_markup=build_main_menu_keyboard(user.role)
+        )
+    except Exception as e:
+        logger.error(f"Error in menu command: {str(e)}")
+        await message.answer(
+            "❌ Произошла ошибка при открытии меню. Пожалуйста, попробуйте позже.",
+            parse_mode="HTML"
+        )
+    finally:
+        session.close()
 
 @router.message(Command("language"))
 async def cmd_language(message: Message):

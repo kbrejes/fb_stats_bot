@@ -15,6 +15,7 @@ from src.api.facebook import FacebookAdsClient, FacebookAdsApiError
 from src.data.processor import DataProcessor
 from src.utils.bot_helpers import fix_user_id, check_token_validity
 from src.bot.keyboards import build_ad_keyboard
+from src.bot.common import process_ads_list
 
 # Create a router for ad handlers
 router = Router()
@@ -55,133 +56,151 @@ async def cmd_ads(message: Message, command: CommandObject):
     await message.answer(f"🔄 Загружаем список объявлений для кампании {campaign_id}...", parse_mode=None)
     
     try:
-        fb_client = FacebookAdsClient(user_id)
-        ads = await fb_client.get_ads(campaign_id)
-        
-        if not ads:
-            await message.answer(
-                "⚠️ Не найдено объявлений для указанной кампании. "
-                "Возможно, кампания не содержит активных объявлений или у вас нет прав доступа."
-            )
-            return
-        
-        # Format ads data
-        formatted_ads = DataProcessor.format_ads(ads)
-        
-        # Message might be too long for one message
-        ad_parts = DataProcessor.truncate_for_telegram(formatted_ads)
-        
-        for i, part in enumerate(ad_parts):
-            if i == 0:
-                # First part with keyboard
-                try:
-                    await message.answer(
-                        f"📊 Объявления для кампании {campaign_id} ({len(ads)}):\n\n```\n{part}\n```",
-                        parse_mode="Markdown",
-                        reply_markup=build_ad_keyboard(ads, campaign_id)
-                    )
-                except Exception as markdown_error:
-                    logger.error(f"Markdown error: {str(markdown_error)}")
-                    # Try without parse_mode if markdown fails
-                    await message.answer(
-                        f"📊 Объявления для кампании {campaign_id} ({len(ads)}):\n\n{part}",
-                        reply_markup=build_ad_keyboard(ads, campaign_id)
-                    )
-            else:
-                # Additional parts if any
-                try:
-                    await message.answer(
-                        f"```\n{part}\n```",
-                        parse_mode="Markdown"
-                    )
-                except Exception as markdown_error:
-                    logger.error(f"Markdown error: {str(markdown_error)}")
-                    # Try without parse_mode if markdown fails
-                    await message.answer(part)
-                
-    except FacebookAdsApiError as e:
-        # Handle API errors
-        logger.error(f"Facebook API error in ads: {e.message} (code: {e.code})")
-        if e.code == "TOKEN_EXPIRED":
-            await message.answer(
-                "⚠️ Ваш токен доступа истек. Пожалуйста, пройдите авторизацию заново с помощью команды /auth.",
-                parse_mode=None
-            )
-        else:
-            logger.error(f"Facebook API error: {e.message} (code: {e.code})")
-            await message.answer(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
-            
+        await process_ads_list(message, campaign_id, user_id)
     except Exception as e:
         logger.error(f"Unexpected error in ads: {str(e)}")
         await message.answer(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None)
 
 
-async def process_ads(callback: CallbackQuery, campaign_id: str, user_id: int):
+@router.callback_query(F.data.startswith("ad:"))
+async def process_ad_callback(callback: CallbackQuery):
     """
-    Process ads for the selected campaign.
+    Handle ad selection callback.
     
     Args:
         callback: The callback query.
-        campaign_id: The campaign ID.
-        user_id: The user ID.
     """
+    ad_id = callback.data.split(':')[1]
+    user_id = callback.from_user.id
+    
+    try:
+        await callback.answer()
+    except Exception as e:
+        logger.warning(f"Error answering callback: {str(e)}")
+        # Continue even if we can't answer the callback
+        pass
+    
+    # Ensure we're not using the bot ID
+    user_id = await fix_user_id(user_id)
+    
+    # Check token validity
+    is_valid, _ = await check_token_validity(user_id)
+    
+    if not is_valid:
+        try:
+            # Создаем клавиатуру для возврата
+            builder = InlineKeyboardBuilder()
+            button_count = 0
+            
+            builder.add(InlineKeyboardButton(
+                text="↩️ Назад к объявлениям",
+                callback_data="menu:ads"
+            ))
+            button_count += 1
+            
+            builder.add(InlineKeyboardButton(
+                text="🏠 Главное меню",
+                callback_data="menu:main"
+            ))
+            button_count += 1
+            
+            if button_count % 2 != 0:
+                builder.add(InlineKeyboardButton(
+                    text=" ",
+                    callback_data="empty:action"
+                ))
+            
+            builder.adjust(2)
+            
+            await callback.message.edit_text(
+                "⚠️ Ваш токен доступа истек. Пожалуйста, пройдите авторизацию заново с помощью команды /auth.",
+                parse_mode=None,
+                reply_markup=builder.as_markup()
+            )
+        except Exception as e:
+            logger.error(f"Error sending token expired message: {str(e)}")
+        return
+    
+    # Show loading message
+    try:
+        await callback.message.edit_text(f"🔄 Загружаем статистику для объявления {ad_id}...", parse_mode=None)
+    except Exception as e:
+        logger.error(f"Error updating message in ad callback: {str(e)}")
+    
+    # Get ad statistics
     try:
         fb_client = FacebookAdsClient(user_id)
-        ads = await fb_client.get_ads(campaign_id)
+        insights = await fb_client.get_ad_insights(ad_id)
         
-        if not ads:
+        if not insights:
             await callback.message.edit_text(
-                "⚠️ Не найдено объявлений для указанной кампании. "
-                "Возможно, кампания не содержит активных объявлений или у вас нет прав доступа.",
+                "⚠️ Не найдена статистика для указанного объявления.",
                 parse_mode=None
             )
             return
         
-        # Format ads data
-        formatted_ads = DataProcessor.format_ads(ads)
+        # Format insights
+        formatted_insights = DataProcessor.format_insights(insights)
         
-        # Message might be too long for one message
-        ad_parts = DataProcessor.truncate_for_telegram(formatted_ads)
+        # Create keyboard
+        builder = InlineKeyboardBuilder()
+        button_count = 0
         
-        # Edit the original message with the first part
-        try:
-            await callback.message.edit_text(
-                f"📊 Объявления для кампании {campaign_id} ({len(ads)}):\n\n```\n{ad_parts[0]}\n```",
-                parse_mode="Markdown",
-                reply_markup=build_ad_keyboard(ads, campaign_id)
-            )
-        except Exception as markdown_error:
-            print(f"DEBUG: Markdown error in process_ads: {str(markdown_error)}")
-            # Try without parse_mode if markdown fails
-            await callback.message.edit_text(
-                f"📊 Объявления для кампании {campaign_id} ({len(ads)}):\n\n{ad_parts[0]}",
-                reply_markup=build_ad_keyboard(ads, campaign_id)
-            )
+        builder.add(InlineKeyboardButton(
+            text="↩️ Назад к объявлениям",
+            callback_data="menu:ads"
+        ))
+        button_count += 1
         
-        # Send additional parts as new messages if any
-        for i in range(1, len(ad_parts)):
-            try:
-                await callback.message.answer(
-                    f"```\n{ad_parts[i]}\n```",
-                    parse_mode="Markdown"
-                )
-            except Exception as markdown_error:
-                print(f"DEBUG: Markdown error in additional parts: {str(markdown_error)}")
-                # Try without parse_mode if markdown fails
-                await callback.message.answer(ad_parts[i])
-                
-    except FacebookAdsApiError as e:
-        # Handle API errors
-        logger.error(f"Facebook API error in process_ads: {e.message} (code: {e.code})")
-        if e.code == "TOKEN_EXPIRED":
-            await callback.message.edit_text(
-                "⚠️ Ваш токен доступа истек. Пожалуйста, пройдите авторизацию заново с помощью команды /auth.",
-                parse_mode=None
-            )
-        else:
-            logger.error(f"Facebook API error: {e.message} (code: {e.code})")
-            await callback.message.edit_text(f"⚠️ Ошибка API Facebook: {e.message}", parse_mode=None)
-            
+        builder.add(InlineKeyboardButton(
+            text="🏠 Главное меню",
+            callback_data="menu:main"
+        ))
+        button_count += 1
+        
+        if button_count % 2 != 0:
+            builder.add(InlineKeyboardButton(
+                text=" ",
+                callback_data="empty:action"
+            ))
+        
+        builder.adjust(2)
+        
+        await callback.message.edit_text(
+            f"📊 Статистика для объявления {ad_id}:\n\n{formatted_insights}",
+            parse_mode=None,
+            reply_markup=builder.as_markup()
+        )
+        
     except Exception as e:
-        logger.error(f"Unexpected error in process_ads: {str(e)}")
-        await callback.message.edit_text(f"⚠️ Произошла ошибка: {str(e)}", parse_mode=None) 
+        logger.error(f"Error getting ad insights: {str(e)}")
+        
+        # Создаем клавиатуру для возврата при ошибке
+        builder = InlineKeyboardBuilder()
+        button_count = 0
+        
+        builder.add(InlineKeyboardButton(
+            text="↩️ Назад к объявлениям",
+            callback_data="menu:ads"
+        ))
+        button_count += 1
+        
+        builder.add(InlineKeyboardButton(
+            text="🏠 Главное меню",
+            callback_data="menu:main"
+        ))
+        button_count += 1
+        
+        if button_count % 2 != 0:
+            builder.add(InlineKeyboardButton(
+                text=" ",
+                callback_data="empty:action"
+            ))
+        
+        builder.adjust(2)
+        
+        await callback.message.edit_text(
+            f"⚠️ Ошибка при получении статистики: {str(e)}",
+            parse_mode=None,
+            reply_markup=builder.as_markup()
+        ) 

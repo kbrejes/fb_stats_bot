@@ -4,13 +4,9 @@ Main entry point for the Facebook Ads Telegram Bot.
 import asyncio
 import logging
 import sys
-from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
-from aiogram.fsm.storage.memory import MemoryStorage
 
-from config.settings import BOT_TOKEN
-from src.storage.database import init_db
+from src.bot import bot, dp, main_router
+from src.storage.database import init_db, get_session
 from src.bot.handlers import router as common_router
 from src.bot.callbacks import callback_router
 from src.bot.account_handlers import router as account_router
@@ -19,62 +15,97 @@ from src.bot.ad_handlers import router as ad_router
 from src.bot.auth_handlers import router as auth_router
 from src.bot.finite_state_machine import router as fsm_router
 from src.bot.notification_handlers import router as notification_router
+from src.bot.analytics_handlers import router as analytics_router
 from src.services.notifications import NotificationService
 from src.utils.logger import setup_logging
+from src.storage.models import NotificationSettings, User
 
 # Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log')
+    ]
+)
 logger = logging.getLogger(__name__)
 
-# Initialize bot and dispatcher
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
+# Подключаем все роутеры к основному
+main_router.include_router(common_router)  # Base router
+main_router.include_router(callback_router)  # Callbacks
+main_router.include_router(account_router)  # Account-related handlers
+main_router.include_router(campaign_router)  # Campaign-related handlers
+main_router.include_router(ad_router)  # Ad-related handlers
+main_router.include_router(auth_router)  # Auth-related handlers
+main_router.include_router(fsm_router)  # FSM router
+main_router.include_router(notification_router)  # Notification handlers
+main_router.include_router(analytics_router)  # Analytics handlers
 
-# Include routers
-dp.include_router(common_router)  # Base router
-dp.include_router(callback_router)  # Callbacks
-dp.include_router(account_router)  # Account-related handlers
-dp.include_router(campaign_router)  # Campaign-related handlers
-dp.include_router(ad_router)  # Ad-related handlers
-dp.include_router(auth_router)  # Auth-related handlers
-dp.include_router(fsm_router)  # FSM router
-dp.include_router(notification_router)  # Notification handlers
+# Подключаем основной роутер к диспетчеру
+dp.include_router(main_router)
 
-async def shutdown():
-    """Корректное завершение работы бота."""
-    logger.info("Shutting down...")
-    
-    # Останавливаем планировщик уведомлений
-    await NotificationService.shutdown()
-    
-    # Закрываем соединение с ботом
-    await bot.session.close()
-    
-    logger.info("Shutdown complete")
+async def setup_notifications():
+    """Настройка планировщика уведомлений при запуске."""
+    session = get_session()
+    try:
+        logger.info("Setting up notification scheduler...")
+        notification_service = NotificationService(session)
+        
+        # Получаем всех пользователей с включенными уведомлениями
+        settings = (session.query(NotificationSettings)
+                   .filter(NotificationSettings.enabled == True)
+                   .all())
+        
+        logger.info(f"Found {len(settings)} users with enabled notifications")
+        
+        # Настраиваем расписание для каждого пользователя
+        for user_settings in settings:
+            try:
+                await notification_service._schedule_user_notifications(user_settings)
+            except Exception as e:
+                logger.error(f"Error scheduling notifications for user {user_settings.user_id}: {str(e)}")
+                continue
+        
+        # Проверяем все запланированные задачи
+        scheduler = notification_service.get_scheduler()
+        jobs = scheduler.get_jobs()
+        logger.info(f"Total scheduled jobs: {len(jobs)}")
+        for job in jobs:
+            logger.info(f"Job: {job.id}, Next run: {job.next_run_time}")
+            
+    except Exception as e:
+        logger.error(f"Error setting up notifications: {str(e)}")
+    finally:
+        session.close()
 
 async def main():
-    """
-    Main function to start the bot.
-    """
+    """Main function to run the bot."""
     try:
-        # Setup logging
-        setup_logging()
+        logger.info("Starting Facebook Ads Telegram Bot...")
         
-        # Initialize the database
+        # Initialize database
         init_db()
+        logger.info("Database initialized")
         
-        # Start the bot
-        logger.info("Starting Facebook Ads Telegram Bot")
+        # Setup notifications
+        await setup_notifications()
+        logger.info("Notifications setup completed")
+        
+        # Start polling
+        logger.info("Starting bot polling...")
         await dp.start_polling(bot)
     finally:
-        await shutdown()
+        logger.info("Shutting down...")
+        await NotificationService.shutdown()
+        await bot.session.close()
+        logger.info("Shutdown complete")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Bot stopped manually")
-        sys.exit(0)
+        logger.info("Bot stopped by user")
     except Exception as e:
         logger.critical(f"Unexpected error: {str(e)}")
         sys.exit(1) 

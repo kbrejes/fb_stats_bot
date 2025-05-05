@@ -13,7 +13,7 @@ import pandas as pd
 
 from src.api.facebook import FacebookAdsClient
 from src.storage.database import get_session
-from src.storage.models import User, Cache
+from src.storage.models import User, Cache, Account
 from src.utils.export import export_data_to_csv, export_data_to_json, export_data_to_excel
 from src.utils.message_formatter import format_insights, format_campaign_table
 from src.utils.logger import get_logger
@@ -356,11 +356,14 @@ async def menu_callback(callback: CallbackQuery):
             return
             
         if menu_item == "main":
-            # Показать меню
+            # Return to main menu
+            from src.bot.keyboards import build_main_menu_keyboard
+            user_role = user.role if user else None
+            
             await callback.message.edit_text(
-                "<b>Меню:</b>",
+                "<b>Меню</b>",
                 parse_mode="HTML",
-                reply_markup=build_main_menu_keyboard(user.role)
+                reply_markup=build_main_menu_keyboard(user_role)
             )
             
         elif menu_item == "accounts":

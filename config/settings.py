@@ -82,6 +82,11 @@ ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
 if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY is not set in environment variables")
 
+# OpenAI settings
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY is not set in environment variables")
+
 # Logging settings
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 LOG_LEVEL_STR = os.getenv('LOG_LEVEL', 'INFO')

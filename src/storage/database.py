@@ -57,6 +57,50 @@ def create_owner(session):
     else:
         logger.debug("Owner user already exists")
 
+def migrate_accounts_to_users():
+    """
+    Миграция существующих данных в таблицу accounts_to_users.
+    Создает связи для всех существующих аккаунтов с их пользователями.
+    """
+    from src.storage.models import User, Account, accounts_to_users
+    
+    logger.info("Starting migration of existing accounts to accounts_to_users table...")
+    
+    session = get_session()
+    try:
+        # Получаем все существующие аккаунты
+        accounts = session.query(Account).all()
+        logger.info(f"Found {len(accounts)} accounts to migrate")
+        
+        # Для каждого аккаунта создаем связь с его пользователем
+        for account in accounts:
+            # Проверяем, существует ли уже такая связь
+            existing_link = session.execute(
+                accounts_to_users.select().where(
+                    (accounts_to_users.c.user_id == account.telegram_id) &
+                    (accounts_to_users.c.account_id == account.id)
+                )
+            ).first()
+            
+            if not existing_link:
+                # Создаем новую связь
+                session.execute(
+                    accounts_to_users.insert().values(
+                        user_id=account.telegram_id,
+                        account_id=account.id
+                    )
+                )
+                logger.debug(f"Created link for account {account.id} and user {account.telegram_id}")
+        
+        session.commit()
+        logger.info("Migration completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Error during migration: {str(e)}")
+        session.rollback()
+    finally:
+        session.close()
+
 def init_db():
     """Initialize the database, creating tables only if they don't exist."""
     from src.storage.models import User, Account, Cache, Permission  # Import models
@@ -64,12 +108,15 @@ def init_db():
     # Проверяем существование таблиц
     inspector = inspect(engine)
     existing_tables = inspector.get_table_names()
-    required_tables = ['users', 'accounts', 'cache', 'permissions']
+    required_tables = ['users', 'accounts', 'cache', 'permissions', 'accounts_to_users']
     
     if not all(table in existing_tables for table in required_tables):
         logger.info("Creating missing database tables...")
         Base.metadata.create_all(engine)
         logger.info("Database tables created successfully")
+        
+        # Мигрируем существующие данные в accounts_to_users
+        migrate_accounts_to_users()
     else:
         logger.debug("All required database tables already exist")
     
