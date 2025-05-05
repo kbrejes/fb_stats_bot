@@ -13,15 +13,17 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 from aiogram.fsm.storage.base import StorageKey
+from config.settings import OWNER_ID
 
 from src.storage.database import get_session
-from src.storage.models import User, Account, Permission
+from src.storage.models import User, Account
 from src.utils.logger import get_logger
 from src.api.facebook import FacebookAdsClient
 from config.settings import ADMIN_USERS
 from src.bot.keyboards import build_main_menu_keyboard
 from src.utils.bot_helpers import fix_user_id
 from src.utils.languages import get_language
+from src.utils.permissions import get_available_roles, is_valid_role, Role, has_permission, Permission
 
 logger = get_logger(__name__)
 
@@ -407,8 +409,7 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
             return
         
         # Проверяем валидность роли
-        valid_roles = await get_available_roles()
-        if role not in valid_roles:
+        if not is_valid_role(role) or role == Role.OWNER.value:
             logger.error(f"[ROLE_SELECTION] ❌ Неверный формат роли: {role}")
             await callback.message.edit_text("❌ Ошибка: неверный формат роли")
             return
@@ -496,62 +497,6 @@ async def process_role_selection(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"[ROLE_SELECTION] ❌ Ошибка при обработке выбора роли: {str(e)}")
         await callback.answer("❌ Ошибка при обработке выбора роли. Пожалуйста, попробуйте позже.")
-
-@router.message(UserStates.selecting_role)
-async def process_role_selection(message: Message, state: FSMContext):
-    """
-    Process user's role selection.
-    
-    Args:
-        message: The message object.
-        state: The FSM context.
-    """
-    user_id = await fix_user_id(message.from_user.id)
-    role_map = {"1": "owner", "2": "admin", "3": "targetologist"}
-    
-    if message.text not in role_map:
-        await message.answer(
-            "❌ Пожалуйста, отправьте только номер роли (1, 2 или 3)."
-        )
-        return
-    
-    role = role_map[message.text]
-    
-    try:
-        session = get_session()
-        # Create new user
-        user = User(
-            telegram_id=user_id,
-            username=message.from_user.username,
-            first_name=message.from_user.first_name,
-            last_name=message.from_user.last_name,
-            role=role
-        )
-        session.add(user)
-        await session.flush()
-        
-        # Create default account for the user
-        account = Account(
-            user_id=user_id,
-            name="Default Account",
-            is_active=True
-        )
-        session.add(account)
-        await session.commit()
-        
-        # Clear state and show main menu
-        await state.clear()
-        await message.answer(
-            f"✅ Ваша роль установлена: {role}\n\n"
-            "Используйте меню ниже для навигации:",
-            reply_markup=build_main_menu_keyboard(role)
-        )
-        
-    except Exception as e:
-        await message.answer(
-            "❌ Произошла ошибка при сохранении данных. Пожалуйста, попробуйте позже."
-        )
-        await state.clear()
 
 async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
     """
@@ -696,34 +641,12 @@ async def get_accounts(user_id: int) -> List[Dict[str, Any]]:
 
 async def get_available_roles() -> List[str]:
     """
-    Получает список доступных ролей из таблицы permissions.
-    Если роли не найдены, создает базовые разрешения и возвращает список ролей.
+    Получает список доступных ролей.
     
     Returns:
         List[str]: Список уникальных ролей, исключая роль "owner"
     """
-    try:
-        session = get_session()
-        # Получаем уникальные роли из таблицы permissions
-        roles = session.query(Permission.role).distinct().all()
-        roles = [role[0] for role in roles if role[0] != "owner"]
-        
-        # Если ролей нет, создаем базовые разрешения
-        if not roles:
-            logger.warning("Роли не найдены в БД. Создаю базовые разрешения...")
-            from src.storage.migrations.seed_permissions import seed_permissions
-            seed_permissions()
-            # Получаем роли снова после создания
-            roles = session.query(Permission.role).distinct().all()
-            roles = [role[0] for role in roles if role[0] != "owner"]
-        
-        logger.info(f"Получены доступные роли: {roles}")
-        return roles or ["admin", "targetologist", "partner"]
-    except Exception as e:
-        logger.error(f"Ошибка при получении ролей: {str(e)}")
-        return ["admin", "targetologist", "partner"]
-    finally:
-        session.close()
+    return get_available_roles(exclude_owner=True)
 
 async def check_token_validity(token: str) -> Tuple[bool, Optional[str]]:
     """
@@ -753,36 +676,43 @@ async def cmd_delete_role(message: Message):
     user_id = message.from_user.id
     logger.info(f"[DELETE_ROLE] 🗑 Получена команда /delete_role от пользователя {user_id}")
     
-    # Проверяем, является ли пользователь админом
-    if user_id not in ADMIN_USERS:
-        logger.warning(f"[DELETE_ROLE] ⚠️ Попытка удаления роли от неадмина: {user_id}")
-        await message.answer("❌ У вас нет прав для выполнения этой команды.")
-        return
-    
-    # Проверяем, указан ли ID пользователя
-    args = message.text.split()
-    if len(args) != 2:
-        logger.warning(f"[DELETE_ROLE] ⚠️ Неверный формат команды от пользователя {user_id}")
-        await message.answer(
-            "❌ Пожалуйста, укажите ID пользователя.\n"
-            "Пример: /delete_role 123456789"
-        )
-        return
-    
-    try:
-        target_user_id = int(args[1])
-    except ValueError:
-        logger.error(f"[DELETE_ROLE] ❌ Неверный формат ID пользователя: {args[1]}")
-        await message.answer("❌ Неверный формат ID пользователя. Используйте только цифры.")
-        return
-    
     session = get_session()
     try:
+        # Проверяем права пользователя
+        admin = session.query(User).filter_by(telegram_id=user_id).first()
+        if not admin or not has_permission(admin.role, Permission.MANAGE_USERS.value):
+            logger.warning(f"[DELETE_ROLE] ⚠️ Попытка удаления роли без прав: {user_id}")
+            await message.answer("❌ У вас нет прав для выполнения этой команды.")
+            return
+        
+        # Проверяем, указан ли ID пользователя
+        args = message.text.split()
+        if len(args) != 2:
+            logger.warning(f"[DELETE_ROLE] ⚠️ Неверный формат команды от пользователя {user_id}")
+            await message.answer(
+                "❌ Пожалуйста, укажите ID пользователя.\n"
+                "Пример: /delete_role 123456789"
+            )
+            return
+        
+        try:
+            target_user_id = int(args[1])
+        except ValueError:
+            logger.error(f"[DELETE_ROLE] ❌ Неверный формат ID пользователя: {args[1]}")
+            await message.answer("❌ Неверный формат ID пользователя. Используйте только цифры.")
+            return
+        
         # Получаем пользователя из БД
         user = session.query(User).filter_by(telegram_id=target_user_id).first()
         if not user:
             logger.warning(f"[DELETE_ROLE] ⚠️ Пользователь не найден: {target_user_id}")
             await message.answer("❌ Пользователь с указанным ID не найден.")
+            return
+        
+        # Проверяем, не пытается ли админ удалить owner'а
+        if user.role == Role.OWNER.value:
+            logger.warning(f"[DELETE_ROLE] ⚠️ Попытка удаления owner'а: {target_user_id}")
+            await message.answer("❌ Невозможно удалить owner'а системы.")
             return
         
         # Сохраняем информацию о пользователе для лога
@@ -824,9 +754,9 @@ async def cmd_list_users(message: Message):
     
     session = get_session()
     try:
-        # Check if user is admin or owner
+        # Проверяем права пользователя
         user = session.query(User).filter_by(telegram_id=user_id).first()
-        if not user or user.role not in ["owner", "admin"]:
+        if not user or not has_permission(user.role, Permission.VIEW_ADMIN_PANEL.value):
             await message.answer("❌ У вас нет прав для просмотра списка пользователей.")
             return
         
@@ -852,7 +782,7 @@ async def cmd_list_users(message: Message):
                 for account in accounts:
                     # Truncate long account names
                     account_name = account.name[:27] + "..." if account.name and len(account.name) > 30 else account.name or "Без имени"
-                    user_list.append(f"   • {account_name} (ID: {account.fb_account_id})")
+                    user_list.append(f"   • {account_name}")
             else:
                 user_list.append("📁 Нет привязанных аккаунтов")
         
@@ -860,9 +790,7 @@ async def cmd_list_users(message: Message):
         await message.answer("\n".join(user_list))
         
     except Exception as e:
-        logger.error(f"Error in list_users: {str(e)}")
-        await message.answer(
-            "❌ Произошла ошибка при получении списка пользователей. Пожалуйста, попробуйте позже."
-        )
+        logger.error(f"Error listing users: {str(e)}")
+        await message.answer("❌ Произошла ошибка при получении списка пользователей.")
     finally:
         session.close()

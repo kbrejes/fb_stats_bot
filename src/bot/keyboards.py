@@ -5,6 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 from typing import List, Dict, Any, Optional
 
 from config.settings import DATE_PRESETS, EXPORT_FORMATS
+from src.utils.permissions import has_permission, Permission
 
 def build_account_keyboard(accounts: List[Dict], add_stats: bool = False):
     """
@@ -323,8 +324,8 @@ def build_main_menu_keyboard(user_role: str = None):
         callback_data="menu:accounts"
     ))
     
-    # Кнопка авторизации только для owner и admin
-    if user_role in ['owner', 'admin']:
+    # Кнопка авторизации только для тех, у кого есть права на управление пользователями
+    if user_role and has_permission(user_role, Permission.MANAGE_USERS.value):
         builder.add(InlineKeyboardButton(
             text="🔐 Авторизация",
             callback_data="menu:auth"
