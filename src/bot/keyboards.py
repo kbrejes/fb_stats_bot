@@ -320,14 +320,20 @@ def build_main_menu_keyboard(user_role: str = None):
     
     # Main menu buttons - доступны всем
     builder.add(InlineKeyboardButton(
-        text="📊 Аккаунты",
+        text="🗿 Аккаунты",
         callback_data="menu:accounts"
+    ))
+    
+    # Кнопка уведомлений доступна всем
+    builder.add(InlineKeyboardButton(
+        text="🧴 Уведомления",
+        callback_data="menu:notifications"
     ))
     
     # Кнопка авторизации только для тех, у кого есть права на управление пользователями
     if user_role and has_permission(user_role, Permission.MANAGE_USERS.value):
         builder.add(InlineKeyboardButton(
-            text="🔐 Авторизация",
+            text="🪓 Авторизация",
             callback_data="menu:auth"
         ))
     

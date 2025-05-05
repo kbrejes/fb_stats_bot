@@ -4,6 +4,7 @@ Process and format data for display in Telegram.
 import pandas as pd
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime, timedelta
+import random
 
 from src.utils.logger import get_logger
 
@@ -152,79 +153,93 @@ class DataProcessor:
             if not date_start or not date_stop:
                 return None
                 
+            # Преобразуем строки дат в объекты datetime
             start_date = datetime.strptime(date_start, '%Y-%m-%d')
             end_date = datetime.strptime(date_stop, '%Y-%m-%d')
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Failed to parse dates for account {account_name}: {str(e)}")
+            
+            # Словарь русских названий месяцев
+            MONTHS = {
+                1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля',
+                5: 'мая', 6: 'июня', 7: 'июля', 8: 'августа',
+                9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'
+            }
+            
+            # Форматируем даты в нужном формате
+            start_str = start_date.strftime('%d')
+            end_str = end_date.strftime('%d')
+            
+            # Если месяцы разные, добавляем названия месяцев
+            if start_date.month != end_date.month:
+                start_str = f"{start_str} {MONTHS[start_date.month]}"
+                end_str = f"{end_str} {MONTHS[end_date.month]}"
+            else:
+                end_str = f"{end_str} {MONTHS[end_date.month]}"
+                
+        except Exception as e:
+            logger.error(f"Error parsing dates: {str(e)}")
             return None
-        
-        # Словарь русских названий месяцев
-        MONTHS = {
-            1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля',
-            5: 'мая', 6: 'июня', 7: 'июля', 8: 'августа',
-            9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'
-        }
-        
-        # Форматируем даты
-        start_str = f"{start_date.day} {MONTHS[start_date.month]} {start_date.year}"
-        end_str = f"{end_date.day} {MONTHS[end_date.month]} {end_date.year}"
-        
-        # Суммируем метрики
+            
+        # Собираем статистику
         total_spend = sum(float(i.get('spend', 0)) for i in insights)
         total_reach = sum(float(i.get('reach', 0)) for i in insights)
         total_clicks = sum(float(i.get('clicks', 0)) for i in insights)
         total_impressions = sum(float(i.get('impressions', 0)) for i in insights)
         
-        # Рассчитываем CTR
+        # Вычисляем CTR и CPC
         ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
-        
-        # Рассчитываем CPC
         cpc = total_spend / total_clicks if total_clicks > 0 else 0
         
-        # Собираем информацию о конверсиях
-        conversions = 0
+        # Получаем данные о конверсиях
         conversion_type = None
-        conversion_cost = None
+        conversions = 0
         
-        # Сначала собираем все конверсии
+        # Сначала ищем кастомные конверсии
         for insight in insights:
             for conversion in insight.get('conversions', []):
-                if conversion.get('action_type', '').startswith('offsite_conversion.fb_pixel_custom'):
+                action_type = conversion.get('action_type', '')
+                if action_type.startswith('offsite_conversion.fb_pixel_custom.'):
+                    conversion_type = action_type
                     conversions += float(conversion.get('value', 0))
-                    conversion_type = conversion.get('action_type')
+                    break
+            if conversion_type:
+                break
         
-        # Если нашли конверсии, ищем их стоимость
-        if conversion_type and conversions > 0:
-            # Сначала пытаемся найти стоимость в cost_per_action_type
+        # Если кастомных конверсий нет, ищем обычные лиды
+        if not conversion_type:
             for insight in insights:
-                for cost in insight.get('cost_per_action_type', []):
-                    if cost.get('action_type') == conversion_type:
-                        if conversion_cost is None:
-                            conversion_cost = float(cost.get('value', 0))
-                        else:
-                            conversion_cost = (conversion_cost + float(cost.get('value', 0))) / 2
-            
-            # Если стоимость не найдена в cost_per_action_type, рассчитываем вручную
-            if conversion_cost is None and total_spend > 0:
-                conversion_cost = total_spend / conversions
-                logger.info(f"Calculated manual conversion cost for {account_name}: {conversion_cost} (spend: {total_spend}, conversions: {conversions})")
+                for conversion in insight.get('conversions', []):
+                    action_type = conversion.get('action_type', '')
+                    if action_type in ['lead', 'offsite_conversion.fb_pixel_lead']:
+                        conversion_type = action_type
+                        conversions += float(conversion.get('value', 0))
+                        break
+                if conversion_type:
+                    break
         
         # Если нет данных о конверсиях, возвращаем None
         if not conversion_type or conversions == 0:
             return None
             
+        # Рассчитываем цену конверсии вручную
+        conversion_cost = total_spend / conversions if conversions > 0 else None
+        logger.info(f"Calculated conversion cost for {account_name}: {conversion_cost} (spend: {total_spend}, conversions: {conversions})")
+            
+        # Выбираем случайный эмодзи
+        emojis = ['📜', '💌', '🧧']
+        random_emoji = random.choice(emojis)
+            
         # Форматируем сообщение
         message = [
-            f"📊 Статистика по аккаунту {account_name} за период {start_str} - {end_str}:",
+            f"{random_emoji} Статистика за {start_str} - {end_str} ({account_name}):",
             "",
             f"Конверсий: {int(conversions)}",
-            f"Тип конверсий: {conversion_type}",
             f"Цена конверсии: ${conversion_cost:.2f}" if conversion_cost is not None else "Цена конверсии: н/д",
-            f"Спенд: ${total_spend:.2f}",
+            f"Спенд: ${total_spend:.2f}\n",
             f"Охват: {int(total_reach):,}".replace(",", " "),
             f"Клики: {int(total_clicks):,}".replace(",", " "),
             f"CTR: {ctr:.2f}%",
-            f"CPC: ${cpc:.2f}"
+            f"CPC: ${cpc:.2f}\n",
+            f"Тип конверсий: {conversion_type}"
         ]
         
         return "\n".join(message)
