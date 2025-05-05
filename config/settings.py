@@ -25,6 +25,11 @@ else:
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 BOT_ID = 8113924050  # ID of the bot
 
+# Owner settings
+OWNER_ID = int(os.getenv("OWNER_ID", "400133981"))  # Замените YOUR_TELEGRAM_ID на ваш Telegram ID
+OWNER_USERNAME = os.getenv("OWNER_USERNAME", "kbrejes")  # Замените на ваш username
+OWNER_FIRST_NAME = os.getenv("OWNER_FIRST_NAME", "Owner")
+
 # Admin users
 ADMIN_USERS = [int(id) for id in os.getenv("ADMIN_USERS", "").split(",") if id]
 

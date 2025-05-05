@@ -646,7 +646,8 @@ async def get_available_roles() -> List[str]:
     Returns:
         List[str]: Список уникальных ролей, исключая роль "owner"
     """
-    return get_available_roles(exclude_owner=True)
+    from src.utils.permissions import get_available_roles as get_roles_sync
+    return get_roles_sync(exclude_owner=True)
 
 async def check_token_validity(token: str) -> Tuple[bool, Optional[str]]:
     """

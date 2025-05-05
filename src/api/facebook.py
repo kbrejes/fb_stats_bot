@@ -51,6 +51,18 @@ class FacebookAdsClient:
         # We'll load the token when needed
         self._access_token = None
         self._owner_id = None
+        self._session = None
+        
+    async def __aenter__(self):
+        """Async context manager entry."""
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        self._session = aiohttp.ClientSession(connector=connector)
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        if self._session:
+            await self._session.close()
         
     async def _get_owner_id(self, session) -> Optional[int]:
         """
@@ -124,6 +136,9 @@ class FacebookAdsClient:
         Raises:
             FacebookAdsApiError: If the request fails.
         """
+        if not self._session:
+            await self.__aenter__()
+            
         token = await self._get_access_token()
         params = params or {}
         params['access_token'] = token
@@ -141,89 +156,70 @@ class FacebookAdsClient:
         retry_count = 0
         while retry_count < retries:
             try:
-                # Using a ClientSession with SSL verification disabled
-                connector = aiohttp.TCPConnector(ssl=ssl_context)
-                async with aiohttp.ClientSession(connector=connector) as session:
-                    if method == 'GET':
-                        async with session.get(url) as response:
-                            data = await response.json()
-                    elif method == 'POST':
-                        async with session.post(url, data=params) as response:
-                            data = await response.json()
-                    else:
-                        raise ValueError(f"Unsupported HTTP method: {method}")
+                if method == 'GET':
+                    async with self._session.get(url) as response:
+                        data = await response.json()
+                elif method == 'POST':
+                    async with self._session.post(url, data=params) as response:
+                        data = await response.json()
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                
+                # Проверка на наличие ошибок в ответе
+                if 'error' in data:
+                    error = data['error']
+                    error_message = error.get('message', 'Unknown error')
+                    error_type = error.get('type', 'Unknown')
+                    error_code = error.get('code', 0)
+                    error_subcode = error.get('error_subcode', 0)
                     
-                    # Проверка на наличие ошибок в ответе
-                    if 'error' in data:
-                        error = data['error']
-                        error_message = error.get('message', 'Unknown error')
-                        error_type = error.get('type', 'Unknown')
-                        error_code = error.get('code', 0)
-                        error_subcode = error.get('error_subcode', 0)
-                        
-                        logger.error(f"Facebook API error: {error_message} (code: {error_code}, type: {error_type}, subcode: {error_subcode})")
-                        print(f"DEBUG: API error details: {json.dumps(error, indent=2)}")
-                        
-                        # Определяем внутренний код ошибки для нашего приложения
-                        internal_error_code = None
-                        
-                        # OAuth ошибки (истекший токен, недостаточные разрешения и т.д.)
-                        if error_code == 190 or error_type == 'OAuthException':
-                            if "access token" in error_message.lower() and "expired" in error_message.lower():
-                                internal_error_code = "TOKEN_EXPIRED"
-                            elif "permission" in error_message.lower():
-                                internal_error_code = "INSUFFICIENT_PERMISSIONS"
-                            else:
-                                internal_error_code = "TOKEN_EXPIRED"  # Общий случай для OAuth ошибок
-                            print(f"DEBUG: OAuth error detected: {error_message}. Setting internal_error_code to {internal_error_code}")
-                        
-                        # Ошибки доступа к бизнес-аккаунту
-                        elif error_code == 200:
-                            internal_error_code = "ACCESS_DENIED"
-                        
-                        # Ошибки лимита запросов
-                        elif error_code in [4, 17, 341]:
-                            internal_error_code = "RATE_LIMIT"
-                        
-                        # Прочие ошибки API
+                    logger.error(f"Facebook API error: {error_message} (code: {error_code}, type: {error_type}, subcode: {error_subcode})")
+                    print(f"DEBUG: API error details: {json.dumps(error, indent=2)}")
+                    
+                    # Определяем внутренний код ошибки для нашего приложения
+                    internal_error_code = None
+                    
+                    # OAuth ошибки (истекший токен, недостаточные разрешения и т.д.)
+                    if error_code == 190 or error_type == 'OAuthException':
+                        if "access token" in error_message.lower() and "expired" in error_message.lower():
+                            internal_error_code = "TOKEN_EXPIRED"
+                        elif "permission" in error_message.lower():
+                            internal_error_code = "INSUFFICIENT_PERMISSIONS"
                         else:
-                            internal_error_code = str(error_code)
+                            internal_error_code = "TOKEN_EXPIRED"  # Общий случай для OAuth ошибок
+                        print(f"DEBUG: OAuth error detected: {error_message}. Setting internal_error_code to {internal_error_code}")
+                    
+                    # Ошибки доступа к бизнес-аккаунту
+                    elif error_code == 200:
+                        internal_error_code = "ACCESS_DENIED"
+                    
+                    # Ошибки лимита запросов
+                    elif error_code in [4, 17, 341]:
+                        internal_error_code = "RATE_LIMIT"
+                    
+                    # Прочие ошибки API
+                    else:
+                        internal_error_code = str(error_code)
+                    
+                    # Проверка на необходимость повторной попытки
+                    if internal_error_code == "RATE_LIMIT" and retry_count < retries:
+                        retry_count += 1
+                        wait_time = min(2 ** retry_count, 60)  # Экспоненциальное ожидание
+                        logger.info(f"Rate limited. Retrying in {wait_time} seconds...")
+                        await asyncio.sleep(wait_time)
+                        continue
                         
-                        # Проверка на необходимость повторной попытки
-                        if internal_error_code == "RATE_LIMIT" and retry_count < retries:
-                            retry_count += 1
-                            wait_time = min(2 ** retry_count, 60)  # Экспоненциальное ожидание
-                            logger.info(f"Rate limited. Retrying in {wait_time} seconds...")
-                            await asyncio.sleep(wait_time)
-                            continue
-                            
-                        # Другие ошибки - пробрасываем исключение
-                        raise FacebookAdsApiError(
-                            error_message,
-                            internal_error_code,
-                            data
-                        )
-                    
-                    # Если ошибок нет - возвращаем данные
-                    return data
-                    
+                    raise FacebookAdsApiError(error_message, internal_error_code, error)
+                
+                return data
+                
             except aiohttp.ClientError as e:
                 logger.error(f"HTTP error during API request: {str(e)}")
-                print(f"DEBUG: HTTP client error: {str(e)}")
-                
-                # Retry for network errors
-                if retry_count < retries:
+                if retry_count < retries - 1:
                     retry_count += 1
-                    wait_time = min(2 ** retry_count, 60)
-                    logger.info(f"Network error. Retrying in {wait_time} seconds...")
-                    await asyncio.sleep(wait_time)
+                    await asyncio.sleep(1)
                     continue
-                    
-                raise FacebookAdsApiError(f"Network error: {str(e)}", "NETWORK_ERROR")
-                
-            except Exception as e:
-                logger.error(f"Unexpected error during API request: {str(e)}")
-                raise FacebookAdsApiError(f"Unexpected error: {str(e)}")
+                raise FacebookAdsApiError(f"HTTP error: {str(e)}", "HTTP_ERROR")
         
         # If we've exhausted all retries
         raise FacebookAdsApiError("Maximum retries exceeded")
@@ -583,7 +579,8 @@ class FacebookAdsClient:
                 'cost_per_inline_link_click', 'cost_per_unique_click', 
                 'cost_per_15_sec_video_view', 'unique_actions',
                 'video_p25_watched_actions', 'video_p50_watched_actions', 
-                'video_p75_watched_actions', 'video_p100_watched_actions'
+                'video_p75_watched_actions', 'video_p100_watched_actions',
+                'date_start', 'date_stop'  # Добавляем поля для дат
             ]
             
         cache_key = f"insights:{self.user_id}:{object_id}:{date_preset}:{level}"
@@ -599,8 +596,8 @@ class FacebookAdsClient:
             params = {
                 'fields': ','.join(fields),
                 'level': level,
-                'date_preset': facebook_date_preset,  # Use the mapped value
-                'time_increment': 'all_days'  # Получать агрегированные данные без разделения по дням
+                'date_preset': facebook_date_preset,
+                'time_increment': 1  # Получаем данные по дням для правильных дат
             }
             
             print(f"DEBUG: Insights request params: {params}")
@@ -609,17 +606,58 @@ class FacebookAdsClient:
             
             insights = data.get('data', [])
             
-            # Проверяем, есть ли кастомные конверсии, и если да, запрашиваем информацию о них
-            has_custom_conversions = False
-            for insight in insights:
-                if 'conversions' in insight:
-                    for conv in insight.get('conversions', []):
-                        if 'action_type' in conv and conv['action_type'].startswith('offsite_conversion.fb_pixel_custom.'):
-                            has_custom_conversions = True
-                            break
+            # Если получили данные по дням, агрегируем их
+            if insights:
+                aggregated_insight = {
+                    'date_start': insights[0].get('date_start'),
+                    'date_stop': insights[-1].get('date_stop'),
+                    'impressions': sum(float(i.get('impressions', 0)) for i in insights),
+                    'clicks': sum(float(i.get('clicks', 0)) for i in insights),
+                    'reach': sum(float(i.get('reach', 0)) for i in insights),
+                    'spend': sum(float(i.get('spend', 0)) for i in insights),
+                    'conversions': [],
+                    'cost_per_action_type': []
+                }
                 
-                if has_custom_conversions:
-                    break
+                # Агрегируем конверсии и их стоимость
+                conversion_values = {}
+                cost_per_action = {}
+                
+                for insight in insights:
+                    for conv in insight.get('conversions', []):
+                        action_type = conv.get('action_type')
+                        if action_type and action_type.startswith('offsite_conversion.fb_pixel_custom'):
+                            if action_type not in conversion_values:
+                                conversion_values[action_type] = 0
+                            conversion_values[action_type] += float(conv.get('value', 0))
+                    
+                    for cost in insight.get('cost_per_action_type', []):
+                        action_type = cost.get('action_type')
+                        if action_type and action_type.startswith('offsite_conversion.fb_pixel_custom'):
+                            values = [float(cost.get('value', 0)) for cost in insight.get('cost_per_action_type', [])
+                                    if cost.get('action_type') == action_type]
+                            if values:
+                                if action_type not in cost_per_action:
+                                    cost_per_action[action_type] = []
+                                cost_per_action[action_type].extend(values)
+                
+                # Добавляем агрегированные конверсии
+                for action_type, value in conversion_values.items():
+                    aggregated_insight['conversions'].append({
+                        'action_type': action_type,
+                        'value': value
+                    })
+                
+                # Добавляем агрегированные стоимости конверсий (среднее значение)
+                for action_type, values in cost_per_action.items():
+                    if values:
+                        avg_cost = sum(values) / len(values)
+                        aggregated_insight['cost_per_action_type'].append({
+                            'action_type': action_type,
+                            'value': avg_cost
+                        })
+                
+                insights = [aggregated_insight]
             
             # Cache the result for 10 minutes (insights change frequently)
             Cache.set(session, cache_key, insights, 600)

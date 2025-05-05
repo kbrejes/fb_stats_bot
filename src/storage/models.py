@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Table
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Table, Time, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -97,6 +97,12 @@ class User(Base):
         "Account",
         secondary=accounts_to_users,
         backref="shared_users"
+    )
+    notification_settings = relationship(
+        'NotificationSettings',
+        back_populates='user',
+        uselist=False,  # один-к-одному
+        cascade='all, delete-orphan'
     )
 
     def set_fb_token(self, token: str, expires_in: int = 0):
@@ -371,4 +377,24 @@ class Cache(Base):
             session.delete(entry)
         
         session.commit()
-        return count 
+        return count
+
+class NotificationSettings(Base):
+    """Настройки уведомлений пользователя."""
+    __tablename__ = 'notification_settings'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.telegram_id', ondelete='CASCADE'), nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)
+    notification_time = Column(Time, nullable=False)  # Время отправки уведомлений
+    timezone = Column(String, nullable=False, default='UTC')  # Часовой пояс пользователя
+    notification_types = Column(JSON, nullable=False, default={
+        'daily_stats': True,
+        'performance_alerts': True,
+        'budget_alerts': True
+    })
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Связь с пользователем
+    user = relationship('User', back_populates='notification_settings') 

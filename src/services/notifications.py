@@ -9,11 +9,12 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 from aiogram import Bot
 
-from src.storage.models import User, NotificationSettings
+from src.storage.models import User, NotificationSettings, Account
 from src.utils.logger import get_logger
 from src.api.facebook import FacebookAdsClient, FacebookAdsApiError
 from src.data.processor import DataProcessor
 from config.settings import BOT_TOKEN
+from src.storage.database import get_session
 
 logger = get_logger(__name__)
 
@@ -175,67 +176,75 @@ class NotificationService:
             logger.info(f"Removed job {job.id} for user {user_id}")
     
     async def _send_notifications(self, user_id: int):
-        """Отправляет уведомления пользователю."""
+        """Отправляет уведомления пользователю только по его аккаунтам."""
+        session = None
         try:
-            # Получаем настройки уведомлений из сессии
-            settings = (self.session.query(NotificationSettings)
+            # Создаем новую сессию для этого вызова
+            session = get_session()
+            
+            # Получаем настройки уведомлений
+            settings = (session.query(NotificationSettings)
                       .filter(NotificationSettings.user_id == user_id)
                       .first())
                       
             if not settings or not settings.enabled:
                 return
                 
-            # Получаем пользователя из БД
-            user = self.session.query(User).filter_by(telegram_id=user_id).first()
+            # Получаем пользователя
+            user = session.query(User).filter_by(telegram_id=user_id).first()
             if not user:
                 logger.error(f"User {user_id} not found in database")
                 return
-                
-            # Создаем клиент Facebook API
-            fb_client = FacebookAdsClient(user_id)
+
+            # Получаем только аккаунты пользователя из БД и сразу загружаем все необходимые данные
+            user_accounts = (session.query(Account)
+                            .filter_by(telegram_id=user_id)
+                            .all())
             
-            # Получаем список рекламных аккаунтов пользователя
-            accounts, error = await fb_client.get_accounts()
-            if error:
-                logger.error(f"Error getting accounts for user {user_id}: {error}")
+            # Сохраняем необходимые данные из аккаунтов
+            account_data = [(account.fb_account_id, account.name) for account in user_accounts]
+            
+            if not account_data:
+                await self.bot.send_message(
+                    user_id,
+                    "У вас нет привязанных рекламных аккаунтов."
+                )
                 return
-            
-            if not accounts:
-                return
-                
-            messages = []
-            
-            # Для каждого аккаунта получаем статистику
-            for account in accounts:
-                account_id = account.get('id')
-                account_name = account.get('name', account_id)
-                
-                try:
-                    # Получаем статистику аккаунта
-                    insights = await fb_client.get_account_insights(account_id, 'last_7d')
-                    
-                    if not insights:
+
+            # Создаем клиент Facebook API с использованием контекстного менеджера
+            async with FacebookAdsClient(user_id) as fb_client:
+                # Для каждого аккаунта получаем статистику
+                for fb_account_id, account_name in account_data:
+                    try:
+                        # Получаем статистику через Facebook API
+                        insights = await fb_client.get_account_insights(fb_account_id)
+                        
+                        # Форматируем статистику
+                        stats_text = DataProcessor.format_insights(insights, account_name)
+                        
+                        # Отправляем уведомление только если есть данные
+                        if stats_text:
+                            await self.bot.send_message(
+                                user_id,
+                                stats_text
+                            )
+                    except FacebookAdsApiError as e:
+                        # Просто логируем ошибку без отправки уведомления пользователю
+                        logger.error(f"Error getting insights for account {fb_account_id}: {str(e)}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Unexpected error processing account {fb_account_id}: {str(e)}")
                         continue
 
-                    # Форматируем данные
-                    formatted_data = DataProcessor.format_insights(insights, account_name)
-                    messages.append(formatted_data)
-                    
-                except Exception as e:
-                    logger.error(f"Ошибка при получении статистики для аккаунта {account_id}: {str(e)}")
-                    continue
-            
-            if messages:
-                # Объединяем сообщения с разделителем и двойными переносами строк
-                final_message = "\n\n***\n\n".join(messages)
-                
-                # Отправляем сообщение пользователю
-                await self.bot.send_message(user_id, final_message)
-                
         except Exception as e:
             logger.error(f"Error sending notifications to user {user_id}: {str(e)}")
-            if isinstance(e, FacebookAdsApiError):
-                logger.error(f"Facebook API Error Code: {e.code}")
+            await self.bot.send_message(
+                user_id,
+                "❌ Произошла ошибка при получении данных. Пожалуйста, попробуйте позже."
+            )
+        finally:
+            if session:
+                session.close()
     
     async def disable_notifications(self, user_id: int) -> bool:
         """

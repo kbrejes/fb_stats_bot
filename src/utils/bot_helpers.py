@@ -9,7 +9,7 @@ from src.storage.models import User
 
 logger = logging.getLogger(__name__)
 
-BOT_ID = 8113924050
+BOT_ID = 7595294156
 
 async def fix_user_id(user_id: int) -> int:
     """

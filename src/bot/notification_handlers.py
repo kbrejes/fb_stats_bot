@@ -190,12 +190,16 @@ async def notification_callback(callback: CallbackQuery, state: FSMContext):
         notification_service = NotificationService(session)
         
         if action == "enable":
-            # Включаем уведомления
+            # Получаем текущие настройки
+            current_settings = session.query(NotificationSettings).filter_by(user_id=user_id).first()
+            
+            # Включаем уведомления, сохраняя текущие настройки времени и часового пояса
             settings = await notification_service.create_user_notifications(
                 user_id,
-                time(10, 0),
-                "UTC",
-                enabled=True
+                current_settings.notification_time if current_settings else time(10, 0),
+                current_settings.timezone if current_settings else "UTC",
+                enabled=True,
+                notification_types=current_settings.notification_types if current_settings else None
             )
             await callback.answer("✅ Уведомления включены")
             
