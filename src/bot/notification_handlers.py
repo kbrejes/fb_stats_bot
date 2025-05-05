@@ -44,6 +44,47 @@ class NotificationStates(StatesGroup):
     """Состояния для настройки уведомлений."""
     waiting_for_time = State()
 
+def format_notification_settings(settings: Optional[NotificationSettings]) -> str:
+    """
+    Форматирует сообщение с настройками уведомлений.
+    
+    Args:
+        settings: Объект настроек уведомлений или None
+        
+    Returns:
+        Отформатированное сообщение
+    """
+    if not settings:
+        return (
+            "<b>Настройки уведомлений:</b>\n\n"
+            "🔕 Отключены\n"
+            "Время отправки: 10:00\n"
+            "Часовой пояс: UTC\n\n"
+        )
+    
+    status = "🔔 Включены" if settings.enabled else "🔕 Отключены"
+    notification_time = settings.notification_time.strftime("%H:%M")
+    timezone_display = TIMEZONE_DISPLAY.get(settings.timezone, settings.timezone)
+    
+    types_map = {
+        'daily_stats': 'Ежедневная статистика',
+        'campaigns': 'Информация о кампаниях',
+        'budget_alerts': 'Оповещения о бюджете'
+    }
+    
+    types_text = ""
+    for type_key, type_name in types_map.items():
+        enabled = settings.notification_types.get(type_key, True)
+        status_icon = "✅" if enabled else "❌"
+        types_text += f"• {type_name}: {status_icon}\n"
+    
+    return (
+        "<b>Настройки уведомлений:</b>\n\n"
+        f"{status}\n\n"
+        f"Время получения сводки: {notification_time}\n"
+        f"Часовой пояс: {timezone_display}\n\n"
+    )
+
 def build_notification_keyboard(enabled: bool = True) -> InlineKeyboardBuilder:
     """
     Создать клавиатуру для управления уведомлениями.
@@ -64,7 +105,7 @@ def build_notification_keyboard(enabled: bool = True) -> InlineKeyboardBuilder:
     
     # Кнопка настройки времени
     builder.button(
-        text="⏰ Изменить время",
+        text="🕑 Изменить время",
         callback_data="notifications:set_time"
     )
     
@@ -76,7 +117,7 @@ def build_notification_keyboard(enabled: bool = True) -> InlineKeyboardBuilder:
     
     # Кнопка возврата в меню
     builder.button(
-        text="🔙 Назад",
+        text="⬅️",
         callback_data="menu:main"
     )
     
@@ -135,28 +176,7 @@ async def cmd_notifications(message: Message):
             )
         
         # Формируем сообщение с текущими настройками
-        status = "включены ✅" if settings.enabled else "отключены ❌"
-        notification_time = settings.notification_time.strftime("%H:%M")
-        
-        message_text = (
-            f"🔔 <b>Настройки уведомлений</b>\n\n"
-            f"Статус: {status}\n"
-            f"Время отправки: {notification_time}\n"
-            f"Часовой пояс: {settings.timezone}\n\n"
-            f"Типы уведомлений:\n"
-        )
-        
-        # Добавляем информацию о типах уведомлений
-        types_map = {
-            'daily_stats': 'Ежедневная статистика',
-            'campaigns': 'Информация о кампаниях',
-            'budget_alerts': 'Оповещения о бюджете'
-        }
-        
-        for type_key, type_name in types_map.items():
-            enabled = settings.notification_types.get(type_key, True)
-            status_icon = "✅" if enabled else "❌"
-            message_text += f"• {type_name}: {status_icon}\n"
+        message_text = format_notification_settings(settings)
         
         # Отправляем сообщение с клавиатурой
         await message.answer(
@@ -212,8 +232,8 @@ async def notification_callback(callback: CallbackQuery, state: FSMContext):
             # Переходим в состояние ожидания времени
             await state.set_state(NotificationStates.waiting_for_time)
             await callback.message.edit_text(
-                "⏰ Введите время для отправки уведомлений в формате ЧЧ:ММ\n"
-                "Например: 10:00"
+                "🕑 Во сколько вы хотите получать сводку по статистике?\n\nВведите время в формате ЧЧ:ММ\n\n"
+                "Например: 16:20"
             )
             return
             
@@ -228,30 +248,7 @@ async def notification_callback(callback: CallbackQuery, state: FSMContext):
         
         # Обновляем сообщение с настройками
         settings = session.query(NotificationSettings).filter_by(user_id=user_id).first()
-        status = "включены ✅" if settings.enabled else "отключены ❌"
-        notification_time = settings.notification_time.strftime("%H:%M")
-        
-        # Получаем отображаемое имя часового пояса
-        timezone_display = TIMEZONE_DISPLAY.get(settings.timezone, settings.timezone)
-        
-        message_text = (
-            f"🔔 <b>Настройки уведомлений</b>\n\n"
-            f"Статус: {status}\n"
-            f"Время отправки: {notification_time}\n"
-            f"Часовой пояс: {timezone_display}\n\n"
-            f"Типы уведомлений:\n"
-        )
-        
-        types_map = {
-            'daily_stats': 'Ежедневная статистика',
-            'campaigns': 'Информация о кампаниях',
-            'budget_alerts': 'Оповещения о бюджете'
-        }
-        
-        for type_key, type_name in types_map.items():
-            enabled = settings.notification_types.get(type_key, True)
-            status_icon = "✅" if enabled else "❌"
-            message_text += f"• {type_name}: {status_icon}\n"
+        message_text = format_notification_settings(settings)
         
         await callback.message.edit_text(
             message_text,
@@ -282,28 +279,7 @@ async def timezone_callback(callback: CallbackQuery, state: FSMContext):
             # Возвращаемся к основным настройкам
             settings = session.query(NotificationSettings).filter_by(user_id=user_id).first()
             if settings:
-                status = "включены ✅" if settings.enabled else "отключены ❌"
-                notification_time = settings.notification_time.strftime("%H:%M")
-                timezone_display = TIMEZONE_DISPLAY.get(settings.timezone, settings.timezone)
-                
-                message_text = (
-                    f"🔔 <b>Настройки уведомлений</b>\n\n"
-                    f"Статус: {status}\n"
-                    f"Время отправки: {notification_time}\n"
-                    f"Часовой пояс: {timezone_display}\n\n"
-                    f"Типы уведомлений:\n"
-                )
-                
-                types_map = {
-                    'daily_stats': 'Ежедневная статистика',
-                    'campaigns': 'Информация о кампаниях',
-                    'budget_alerts': 'Оповещения о бюджете'
-                }
-                
-                for type_key, type_name in types_map.items():
-                    enabled = settings.notification_types.get(type_key, True)
-                    status_icon = "✅" if enabled else "❌"
-                    message_text += f"• {type_name}: {status_icon}\n"
+                message_text = format_notification_settings(settings)
                 
                 await callback.message.edit_text(
                     message_text,
@@ -326,27 +302,7 @@ async def timezone_callback(callback: CallbackQuery, state: FSMContext):
         )
         
         # Отправляем обновленные настройки
-        status = "включены ✅" if settings.enabled else "отключены ❌"
-        timezone_display = TIMEZONE_DISPLAY.get(settings.timezone, settings.timezone)
-        
-        message_text = (
-            f"🔔 <b>Настройки уведомлений</b>\n\n"
-            f"Статус: {status}\n"
-            f"Время отправки: {settings.notification_time.strftime('%H:%M')}\n"
-            f"Часовой пояс: {timezone_display}\n\n"
-            f"Типы уведомлений:\n"
-        )
-        
-        types_map = {
-            'daily_stats': 'Ежедневная статистика',
-            'campaigns': 'Информация о кампаниях',
-            'budget_alerts': 'Оповещения о бюджете'
-        }
-        
-        for type_key, type_name in types_map.items():
-            enabled = settings.notification_types.get(type_key, True)
-            status_icon = "✅" if enabled else "❌"
-            message_text += f"• {type_name}: {status_icon}\n"
+        message_text = format_notification_settings(settings)
         
         await callback.message.edit_text(
             message_text,
@@ -403,27 +359,7 @@ async def process_notification_time(message: Message, state: FSMContext):
         await state.clear()
         
         # Отправляем обновленные настройки
-        status = "включены ✅" if settings.enabled else "отключены ❌"
-        timezone_display = TIMEZONE_DISPLAY.get(settings.timezone, settings.timezone)
-        
-        message_text = (
-            f"🔔 <b>Настройки уведомлений</b>\n\n"
-            f"Статус: {status}\n"
-            f"Время отправки: {notification_time.strftime('%H:%M')}\n"
-            f"Часовой пояс: {timezone_display}\n\n"
-            f"Типы уведомлений:\n"
-        )
-        
-        types_map = {
-            'daily_stats': 'Ежедневная статистика',
-            'campaigns': 'Информация о кампаниях',
-            'budget_alerts': 'Оповещения о бюджете'
-        }
-        
-        for type_key, type_name in types_map.items():
-            enabled = settings.notification_types.get(type_key, True)
-            status_icon = "✅" if enabled else "❌"
-            message_text += f"• {type_name}: {status_icon}\n"
+        message_text = format_notification_settings(settings)
         
         await message.answer(
             message_text,

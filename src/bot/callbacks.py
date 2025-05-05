@@ -323,8 +323,7 @@ async def stats_callback(callback: CallbackQuery):
 @callback_router.callback_query(F.data.startswith("menu:"))
 async def menu_callback(callback: CallbackQuery):
     """
-    Handle menu selection callbacks.
-    Callback data format: menu:item
+    Handle menu button presses.
     """
     try:
         await callback.answer()
@@ -333,36 +332,20 @@ async def menu_callback(callback: CallbackQuery):
         # Continue even if we can't answer the callback
         pass
     
-    # Get the user ID
-    user_id = callback.from_user.id
-    
-    # Fix for the issue where bot ID might be used
-    if user_id == 8113924050 or str(user_id) == "8113924050":
-        # Try to find a valid user
-        session = get_session()
-        try:
-            user = session.query(User).filter(User.telegram_id != 8113924050).first()
-            if user:
-                print(f"DEBUG: Replacing bot ID with user ID in menu callback: {user.telegram_id}")
-                user_id = user.telegram_id
-        except Exception as e:
-            print(f"DEBUG: Error finding alternative user in menu callback: {str(e)}")
-        finally:
-            session.close()
-    
+    # Get menu item from callback data
     parts = callback.data.split(":")
     if len(parts) < 2:
+        await callback.message.edit_text("❌ Invalid menu request.")
         return
-    
+        
     menu_item = parts[1]
+    user_id = callback.from_user.id
+    user_id = fix_user_id(user_id)
     
-    # Skip menu:account callbacks since they are handled by account_menu_callback
-    if menu_item == "account":
-        return
+    # Get user's language
+    lang = get_language(user_id)
     
-    # Get user role from database
     session = get_session()
-    user = None
     try:
         user = session.query(User).filter_by(telegram_id=user_id).first()
         if not user:
@@ -416,44 +399,40 @@ async def menu_callback(callback: CallbackQuery):
                 # Create keyboard for accounts
                 keyboard = build_account_keyboard(accounts, add_stats=True)
                 
-                # Update the loading message with accounts list
+                # Update the loading message with the account list
+                await loading_message.edit_text(
+                    "<b>📊 Ваши рекламные аккаунты:</b>",
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+                
+            except Exception as e:
+                logger.error(f"Error loading accounts: {str(e)}")
                 try:
                     await loading_message.edit_text(
-                        "Выберите рекламный аккаунт:",
-                        parse_mode="HTML",
-                        reply_markup=keyboard
-                    )
-                except TelegramBadRequest as e:
-                    if "can't parse entities" in str(e):
-                        # Try without HTML parsing
-                        await loading_message.edit_text(
-                            "Выберите рекламный аккаунт:",
-                            reply_markup=keyboard
-                        )
-                    else:
-                        raise
-                        
-            except Exception as e:
-                logger.error(f"Error handling accounts navigation: {str(e)}")
-                # Try to send an error message
-                try:
-                    await callback.bot.send_message(
-                        chat_id,
                         f"❌ Ошибка при загрузке аккаунтов: {str(e)}"
                     )
-                except Exception as inner_error:
-                    logger.error(f"Could not send error message: {str(inner_error)}")
-            
+                except:
+                    pass
+                    
         elif menu_item == "auth":
-            # Show authentication info
+            # Check if user has permission to manage users
+            if not has_permission(user.role, Permission.MANAGE_USERS.value):
+                await callback.message.edit_text(
+                    "❌ У вас нет прав для выполнения этой команды.",
+                    parse_mode="HTML"
+                )
+                return
+                
+            # Import auth keyboard builder
+            from src.bot.auth_handlers import build_auth_keyboard
+            
+            # Show auth menu
             await callback.message.edit_text(
-                "🔑 <b>Информация об авторизации</b>\n\n"
-                "Для использования бота необходимо пройти авторизацию в Facebook:\n\n"
-                "1. Используйте команду /auth для начала процесса авторизации\n"
-                "2. Перейдите по ссылке и предоставьте боту доступ к вашим данным Facebook Ads\n"
-                "3. Скопируйте URL после перенаправления и отправьте его боту\n\n"
-                "Ваша авторизация будет действительна в течение 60 дней.",
-                parse_mode="HTML"
+                "<b>🔐 Меню авторизации:</b>\n\n"
+                "Выберите действие:",
+                parse_mode="HTML",
+                reply_markup=build_auth_keyboard()
             )
             
         elif menu_item == "help":
@@ -482,6 +461,22 @@ async def menu_callback(callback: CallbackQuery):
                 parse_mode="HTML",
                 reply_markup=build_language_keyboard()
             )
+            
+        elif menu_item == "notifications":
+            # Show notifications menu
+            from src.bot.notification_handlers import build_notification_keyboard, format_notification_settings
+            from src.storage.models import NotificationSettings
+            
+            # Получаем текущие настройки уведомлений
+            settings = session.query(NotificationSettings).filter_by(user_id=user_id).first()
+            enabled = settings.enabled if settings else False
+            
+            await callback.message.edit_text(
+                format_notification_settings(settings),
+                parse_mode="HTML",
+                reply_markup=build_notification_keyboard(enabled).as_markup()
+            )
+            
     except TelegramBadRequest as e:
         # Message was deleted or can't be edited
         print(f"DEBUG: TelegramBadRequest in menu callback: {str(e)}")
@@ -491,15 +486,16 @@ async def menu_callback(callback: CallbackQuery):
         except:
             pass
     except Exception as e:
-        print(f"DEBUG: General exception in menu callback: {str(e)}")
+        logger.error(f"Error in menu callback: {str(e)}")
         try:
-            # Try to send error without parse_mode
-            await callback.message.edit_text(f"❌ Ошибка: {str(e)}", parse_mode=None)
+            await callback.message.edit_text(
+                f"❌ Произошла ошибка: {str(e)}",
+                parse_mode=None
+            )
         except:
             pass
     finally:
-        if session:
-            session.close()
+        session.close()
 
 @callback_router.callback_query(F.data.startswith("account_campaigns_stats:"))
 async def account_campaigns_stats_callback(callback: CallbackQuery):

@@ -16,7 +16,7 @@ from src.bot.keyboards import build_main_menu_keyboard, build_language_keyboard
 from src.utils.languages import set_language, get_language, SUPPORTED_LANGUAGES
 from src.utils.bot_helpers import fix_user_id
 from src.storage.database import get_session
-from src.storage.models import User
+from src.storage.models import User, NotificationSettings
 from config.settings import ADMIN_USERS
 
 # Create a router for common handlers
@@ -40,6 +40,7 @@ async def cmd_help(message: Message):
         "/ads [id_кампании] - Список объявлений для кампании\n"
         "/stats [id_объекта] [период] - Получение статистики\n"
         "/export - Экспорт данных в различных форматах\n"
+        "/notifications - Управление уведомлениями\n"
         "/menu - Показать меню\n"
         "/help - Показать эту справку",
         parse_mode="HTML"
@@ -311,3 +312,37 @@ async def process_menu_campaigns_callback(callback: CallbackQuery):
     # Import account_handlers to show list of accounts, then user will be able to select account and see campaigns
     from src.bot.account_handlers import cmd_accounts
     await cmd_accounts(callback.message)
+
+@router.message(Command("notifications"))
+async def cmd_notifications(message: Message):
+    """
+    Handle the /notifications command.
+    Shows notification settings and control buttons.
+    
+    Args:
+        message: The message object.
+    """
+    user_id = await fix_user_id(message.from_user.id)
+    session = get_session()
+    
+    try:
+        # Получаем текущие настройки уведомлений
+        settings = session.query(NotificationSettings).filter_by(user_id=user_id).first()
+        enabled = settings.enabled if settings else False
+        
+        # Импортируем функции для работы с уведомлениями
+        from src.bot.notification_handlers import build_notification_keyboard, format_notification_settings
+        
+        await message.answer(
+            format_notification_settings(settings),
+            parse_mode="HTML",
+            reply_markup=build_notification_keyboard(enabled).as_markup()
+        )
+    except Exception as e:
+        logger.error(f"Error in notifications command: {str(e)}")
+        await message.answer(
+            "❌ Произошла ошибка при получении настроек уведомлений. Пожалуйста, попробуйте позже.",
+            parse_mode="HTML"
+        )
+    finally:
+        session.close()
