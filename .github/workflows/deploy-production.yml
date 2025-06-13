@@ -1,8 +1,8 @@
-name: 🚀 Deploy to Production (DigitalOcean)
+name: 🚀 Production Deployment
 
 on:
   push:
-    branches: [ main ]
+    branches: [ production ]
     paths-ignore:
       - 'README.md'
       - 'docs/**'
@@ -18,6 +18,11 @@ on:
         options:
           - production
           - staging
+      force_deploy:
+        description: 'Force deployment (skip tests)'
+        required: false
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
