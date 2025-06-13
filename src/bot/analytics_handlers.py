@@ -11,7 +11,9 @@ from src.services.analytics import AnalyticsService, ComparisonPeriod
 from src.data.processor import DataProcessor
 from src.api.facebook import FacebookAdsClient, FacebookAdsApiError
 from src.utils.logger import get_logger
+from src.utils.bot_helpers import fix_user_id
 from config.settings import OPENAI_API_KEY
+from src.bot.finite_state_machine import get_accounts
 
 logger = get_logger(__name__)
 router = Router()
@@ -79,11 +81,10 @@ async def handle_period_selection(callback: CallbackQuery):
     """Обработчик выбора периода сравнения."""
     try:
         period_type = callback.data.split(":")[1]
-        user_id = callback.from_user.id
+        user_id = await fix_user_id(callback.from_user.id)
         
-        # Показываем меню выбора аккаунта
-        fb_client = FacebookAdsClient(user_id)
-        accounts = await fb_client.get_ad_accounts()
+        # Получаем аккаунты через обновленную функцию get_accounts
+        accounts = await get_accounts(user_id)
         
         if not accounts:
             await callback.message.edit_text(
@@ -140,16 +141,25 @@ async def handle_comparison(callback: CallbackQuery):
     """Обработчик сравнения периодов для выбранного аккаунта."""
     try:
         _, period_type, account_id = callback.data.split(":")
-        user_id = callback.from_user.id
+        user_id = await fix_user_id(callback.from_user.id)
         
-        # Получаем название аккаунта
-        fb_client = FacebookAdsClient(user_id)
-        accounts = await fb_client.get_ad_accounts()
+        # Получаем название аккаунта из доступных аккаунтов пользователя
+        accounts = await get_accounts(user_id)
         account_name = next(
             (acc.get('name', f"Аккаунт {account_id}") 
              for acc in accounts if acc.get('id') == account_id),
             f"Аккаунт {account_id}"
         )
+        
+        # Проверяем, есть ли у пользователя доступ к этому аккаунту
+        if not any(acc.get('id') == account_id for acc in accounts):
+            await callback.message.edit_text(
+                "⚠️ У вас нет доступа к этому аккаунту",
+                reply_markup=InlineKeyboardBuilder().add(
+                    InlineKeyboardButton(text="⬅️ Назад", callback_data="analytics:menu")
+                ).as_markup()
+            )
+            return
         
         # Конвертируем строковый тип периода в enum
         period = ComparisonPeriod(period_type)
@@ -282,16 +292,25 @@ async def handle_analysis(callback: CallbackQuery):
     """Обработчик анализа OpenAI."""
     try:
         _, period_type, account_id = callback.data.split(":")
-        user_id = callback.from_user.id
+        user_id = await fix_user_id(callback.from_user.id)
         
-        # Получаем название аккаунта
-        fb_client = FacebookAdsClient(user_id)
-        accounts = await fb_client.get_ad_accounts()
+        # Получаем название аккаунта из доступных аккаунтов пользователя
+        accounts = await get_accounts(user_id)
         account_name = next(
             (acc.get('name', f"Аккаунт {account_id}") 
              for acc in accounts if acc.get('id') == account_id),
             f"Аккаунт {account_id}"
         )
+        
+        # Проверяем, есть ли у пользователя доступ к этому аккаунту
+        if not any(acc.get('id') == account_id for acc in accounts):
+            await callback.message.edit_text(
+                "⚠️ У вас нет доступа к этому аккаунту",
+                reply_markup=InlineKeyboardBuilder().add(
+                    InlineKeyboardButton(text="⬅️ Назад", callback_data="analytics:menu")
+                ).as_markup()
+            )
+            return
         
         # Отправляем сообщение о начале анализа
         await callback.message.edit_text(
