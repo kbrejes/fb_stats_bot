@@ -1,0 +1,39 @@
+# Production requirements - дополнительно к основным requirements.txt
+# PostgreSQL driver
+psycopg2-binary>=2.9.0
+
+# Monitoring and alerting
+sentry-sdk>=1.40.0
+prometheus-client>=0.19.0
+
+# Production server
+gunicorn>=21.2.0
+
+# Security and performance
+redis>=5.0.0
+celery>=5.3.0
+
+# Backup and maintenance
+schedule>=1.2.0
+
+# Health checks
+psutil>=5.9.0
+
+# SSL/TLS support
+certifi>=2023.7.22
+
+# Logging improvements
+structlog>=23.2.0
+colorama>=0.4.6
+
+# Environment management
+python-decouple>=3.8
+
+# Performance monitoring
+memory-profiler>=0.61.0
+
+# Data validation
+pydantic[email]>=2.0.0
+
+# Configuration management
+dynaconf>=3.2.0 

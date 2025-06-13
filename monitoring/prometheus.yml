@@ -1,0 +1,58 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # Telegram Bot Application Metrics
+  - job_name: 'fb-ads-bot'
+    scrape_interval: 10s
+    static_configs:
+      - targets: 
+        - 'bot:8080'
+    metrics_path: '/metrics'
+    scrape_timeout: 5s
+    
+  # Nginx Metrics
+  - job_name: 'nginx'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+        - 'nginx:9000'
+    metrics_path: '/nginx_status'
+    
+  # PostgreSQL Metrics (требует postgres_exporter)
+  - job_name: 'postgres'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+        - 'postgres_exporter:9187'
+    
+  # Redis Metrics (требует redis_exporter)  
+  - job_name: 'redis'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+        - 'redis_exporter:9121'
+        
+  # Node/System Metrics (если добавите node_exporter)
+  - job_name: 'node'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+        - 'node_exporter:9100'
+        
+  # Prometheus Self-Monitoring
+  - job_name: 'prometheus'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+        - 'localhost:9090' 

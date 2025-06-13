@@ -1,0 +1,87 @@
+# ===== PRODUCTION ENVIRONMENT =====
+ENVIRONMENT=production
+
+# ===== TELEGRAM BOT SETTINGS =====
+# Реальный токен бота (используем рабочий токен)
+TELEGRAM_TOKEN=7595294156:AAFcKTYzTt0h0xEt-BiVs-otrmYB6dAL7LY
+
+# Owner settings (ваши реальные данные)
+OWNER_ID=400133981
+OWNER_USERNAME=kbrejes
+OWNER_FIRST_NAME=Kiryushaa
+
+# Admin users (список через запятую)
+ADMIN_USERS=400133981
+
+# ===== FACEBOOK API SETTINGS =====
+# Реальные Facebook App credentials
+FB_APP_ID=639419165542707
+FB_APP_SECRET=73af4e475afddfbd61fb74628481eb28
+
+# ВАЖНО: Замените на ваш реальный домен в продакшне!
+# Например: https://yourbot.herokuapp.com/callback
+FB_REDIRECT_URI=https://localhost:8000/callback
+
+# Facebook API Version
+FB_API_VERSION=v19.0
+
+# ===== OPENAI API SETTINGS =====
+# Реальный OpenAI API ключ
+OPENAI_API_KEY=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
+
+# ===== DATABASE SETTINGS (PRODUCTION) =====
+# PostgreSQL для продакшна (замените на ваши реальные данные)
+DB_CONNECTION_STRING=postgresql://fb_ads_user:secure_password_123@localhost:5432/fb_ads_bot_prod
+
+# Fallback SQLite (если PostgreSQL недоступен)
+# DB_CONNECTION_STRING=sqlite:///data/bot_production.sqlite
+
+# Database path (для SQLite)
+DB_PATH=data/bot_production.db
+
+# ===== SECURITY SETTINGS =====
+# 32-байтный ключ шифрования (тот же, что в dev для совместимости данных)
+ENCRYPTION_KEY=cf3d1c3258968545324a5e02c52c9f1cdf52f0ba5c68bdc1a934482a29402691
+
+# ===== LOGGING & MONITORING =====
+# Production logging settings
+LOG_LEVEL=INFO
+DEBUG=False
+
+# Log files
+LOG_FILE=logs/bot_production.log
+ERROR_LOG_FILE=logs/error_production.log
+
+# ===== PERFORMANCE SETTINGS =====
+# Cache settings
+CACHE_TTL=3600
+CACHE_MAX_SIZE=1000
+
+# API Rate limiting
+MAX_REQUESTS_PER_MINUTE=60
+MAX_CONCURRENT_REQUESTS=10
+
+# ===== MONITORING & ALERTS =====
+# Sentry для мониторинга ошибок (добавьте ваш DSN)
+# SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+
+# Health check settings
+HEALTH_CHECK_INTERVAL=300
+HEALTH_CHECK_URL=http://localhost:8080/health
+
+# ===== DEPLOYMENT SETTINGS =====
+# Production domain (замените на ваш домен)
+PRODUCTION_DOMAIN=localhost
+PRODUCTION_PORT=8000
+
+# SSL settings
+SSL_ENABLED=false
+SSL_CERT_PATH=/etc/ssl/certs/bot.crt
+SSL_KEY_PATH=/etc/ssl/private/bot.key
+
+# ===== BACKUP SETTINGS =====
+# Database backup settings
+BACKUP_ENABLED=true
+BACKUP_INTERVAL=daily
+BACKUP_RETENTION_DAYS=30
+BACKUP_PATH=/var/backups/fb_ads_bot 

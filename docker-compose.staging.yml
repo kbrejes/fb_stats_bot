@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (Staging)
+  postgres-staging:
+    image: postgres:15-alpine
+    container_name: fb_ads_bot_postgres_staging
+    environment:
+      POSTGRES_DB: fb_ads_bot_staging
+      POSTGRES_USER: fb_ads_user_staging
+      POSTGRES_PASSWORD: staging_password_123
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Different port for staging
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fb_ads_user_staging -d fb_ads_bot_staging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis для кэширования (Staging)
+  redis-staging:
+    image: redis:7-alpine
+    container_name: fb_ads_bot_redis_staging
+    ports:
+      - "6380:6379"  # Different port for staging
+    volumes:
+      - redis_staging_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Telegram Bot Application (Staging)
+  bot-staging:
+    build: .
+    container_name: fb_ads_bot_app_staging
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+      redis-staging:
+        condition: service_healthy
+    environment:
+      - ENVIRONMENT=staging
+      - DB_CONNECTION_STRING=postgresql://fb_ads_user_staging:staging_password_123@postgres-staging:5432/fb_ads_bot_staging
+    env_file:
+      - .env.staging
+    volumes:
+      - ./logs/staging:/app/logs
+      - ./data/staging:/app/data
+    ports:
+      - "8001:8000"  # Different port for staging
+      - "8081:8080"  # Health check port
+    restart: unless-stopped
+    networks:
+      - staging_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx для staging (опционально)
+  nginx-staging:
+    image: nginx:alpine
+    container_name: fb_ads_bot_nginx_staging
+    depends_on:
+      - bot-staging
+    ports:
+      - "8080:80"  # Staging на порту 8080
+    volumes:
+      - ./nginx.staging.conf:/etc/nginx/nginx.conf:ro
+      - ./logs/staging/nginx:/var/log/nginx
+    restart: unless-stopped
+    networks:
+      - staging_network
+
+volumes:
+  postgres_staging_data:
+    driver: local
+  redis_staging_data:
+    driver: local
+
+networks:
+  staging_network:
+    driver: bridge 
