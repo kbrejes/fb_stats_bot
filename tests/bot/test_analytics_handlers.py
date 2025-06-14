@@ -101,7 +101,16 @@ async def test_handle_analytics_callback_invalid(callback_query):
 async def test_handle_period_selection(callback_query, sample_account):
     callback_query.data = "period:daily"
 
-    with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client:
+    with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client, patch(
+        "src.bot.analytics_handlers.get_session"
+    ) as mock_get_session:
+        # Мокаем базу данных
+        mock_session = MagicMock()
+        mock_user = MagicMock()
+        mock_user.fb_access_token = "test_token"
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_user
+        mock_get_session.return_value.__enter__.return_value = mock_session
+
         mock_instance = AsyncMock()
         mock_instance.get_ad_accounts.return_value = [sample_account]
         mock_fb_client.return_value = mock_instance
@@ -125,7 +134,16 @@ async def test_handle_period_selection(callback_query, sample_account):
 async def test_handle_period_selection_no_accounts(callback_query):
     callback_query.data = "period:daily"
 
-    with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client:
+    with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client, patch(
+        "src.bot.analytics_handlers.get_session"
+    ) as mock_get_session:
+        # Мокаем базу данных
+        mock_session = MagicMock()
+        mock_user = MagicMock()
+        mock_user.fb_access_token = "test_token"
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_user
+        mock_get_session.return_value.__enter__.return_value = mock_session
+
         mock_instance = AsyncMock()
         mock_instance.get_ad_accounts.return_value = []
         mock_fb_client.return_value = mock_instance
@@ -146,7 +164,16 @@ async def test_handle_comparison(callback_query, sample_account):
         "src.bot.analytics_handlers.analytics_service"
     ) as mock_analytics, patch(
         "src.bot.analytics_handlers.DataProcessor"
-    ) as mock_processor:
+    ) as mock_processor, patch(
+        "src.bot.analytics_handlers.get_session"
+    ) as mock_get_session:
+
+        # Мокаем базу данных
+        mock_session = MagicMock()
+        mock_user = MagicMock()
+        mock_user.fb_access_token = "test_token"
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_user
+        mock_get_session.return_value.__enter__.return_value = mock_session
 
         # Настраиваем моки
         mock_fb_client_instance = AsyncMock()
@@ -173,7 +200,16 @@ async def test_handle_analysis(callback_query, sample_account):
 
     with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client, patch(
         "src.bot.analytics_handlers.analytics_service"
-    ) as mock_analytics:
+    ) as mock_analytics, patch(
+        "src.bot.analytics_handlers.get_session"
+    ) as mock_get_session:
+
+        # Мокаем базу данных
+        mock_session = MagicMock()
+        mock_user = MagicMock()
+        mock_user.fb_access_token = "test_token"
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_user
+        mock_get_session.return_value.__enter__.return_value = mock_session
 
         # Настраиваем моки
         mock_fb_client_instance = AsyncMock()

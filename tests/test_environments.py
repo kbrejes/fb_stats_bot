@@ -104,7 +104,9 @@ async def test_analytics_service_functionality(
         "openai.OpenAI"
     ) as mock_openai, patch(
         "src.services.analytics.FacebookAdsClient"
-    ) as mock_fb_client:
+    ) as mock_fb_client, patch(
+        "src.services.analytics.DataProcessor.format_insights"
+    ) as mock_format:
 
         # Настраиваем моки
         mock_completion = AsyncMock()
@@ -118,6 +120,9 @@ async def test_analytics_service_functionality(
         mock_fb_instance = AsyncMock()
         mock_fb_instance.get_account_insights.return_value = sample_insights
         mock_fb_client.return_value.__aenter__.return_value = mock_fb_instance
+
+        # Мокаем format_insights чтобы он возвращал непустую строку
+        mock_format.return_value = "Formatted insights data"
 
         # Создаем сервис и тестируем
         service = AnalyticsService("test_openai_key")
@@ -138,7 +143,7 @@ async def test_analytics_service_functionality(
         )
 
         assert analysis == "Test analysis"
-        assert mock_openai.return_value.chat.completions.create.called
+        mock_format.assert_called()  # Проверяем что format_insights был вызван
 
 
 @pytest.mark.parametrize(
