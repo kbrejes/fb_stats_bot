@@ -284,7 +284,24 @@ jobs:
             
             echo "✅ .env.prod file created successfully!"
             
-            # Простая проверка здоровья
+            # ЗАПУСКАЕМ DOCKER КОНТЕЙНЕРЫ
+            echo "🐳 Starting Docker containers..."
+            docker-compose -f docker-compose.prod.yml down || true
+            docker-compose -f docker-compose.prod.yml pull || true
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            # Ждем запуска
+            echo "⏳ Waiting for services to start..."
+            sleep 30
+            
+            # Проверяем статус
+            echo "📊 Checking container status..."
+            docker-compose -f docker-compose.prod.yml ps
+            
+            # Показываем логи
+            echo "📋 Recent logs:"
+            docker logs fb_ads_bot_app --tail=10 || echo "No logs yet"
+            
             echo "✅ Deployment completed successfully!"
 
       - name: 🔍 Basic health check
@@ -297,7 +314,20 @@ jobs:
           script: |
             echo "🔍 Checking deployment status..."
             cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean
-            ls -la
+            
+            # Проверяем контейнеры
+            echo "📊 Container status:"
+            docker-compose -f docker-compose.prod.yml ps
+            
+            # Проверяем health endpoint
+            echo "🏥 Health check:"
+            sleep 10
+            curl -f http://localhost:8080/health || echo "Health endpoint not ready yet"
+            
+            # Показываем логи
+            echo "📋 Application logs:"
+            docker logs fb_ads_bot_app --tail=20 || echo "No logs available"
+            
             echo "📁 Files are in place!"
 
   # ===== NOTIFICATIONS =====
