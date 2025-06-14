@@ -49,7 +49,7 @@ services:
     environment:
       - ENVIRONMENT=production
     env_file:
-      - env-production.template  # Будет использовать ваш .env.prod
+      - .env.prod  # Используем правильный .env файл
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data

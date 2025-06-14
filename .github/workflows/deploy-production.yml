@@ -230,6 +230,60 @@ jobs:
               git reset --hard origin/production
             fi
             
+            # Создаем .env.prod файл с правильными настройками
+            cat > .env.prod << 'EOF'
+            # ===== PRODUCTION ENVIRONMENT =====
+            ENVIRONMENT=production
+            
+            # ===== TELEGRAM BOT SETTINGS =====
+            TELEGRAM_TOKEN=7595294156:AAFcKTYzTt0h0xEt-BiVs-otrmYB6dAL7LY
+            OWNER_ID=400133981
+            OWNER_USERNAME=kbrejes
+            OWNER_FIRST_NAME=Kiryushaa
+            ADMIN_USERS=400133981
+            
+            # ===== FACEBOOK API SETTINGS =====
+            FB_APP_ID=639419165542707
+            FB_APP_SECRET=73af4e475afddfbd61fb74628481eb28
+            FB_REDIRECT_URI=https://188.166.221.59/api/facebook/callback
+            FB_API_VERSION=v19.0
+            
+            # ===== OPENAI API SETTINGS =====
+            OPENAI_API_KEY=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
+            
+            # ===== DATABASE SETTINGS =====
+            DB_CONNECTION_STRING=postgresql://fb_ads_user:secure_password_123@localhost:5432/fb_ads_bot_prod
+            DB_PATH=data/bot_production.db
+            
+            # ===== SECURITY SETTINGS =====
+            ENCRYPTION_KEY=cf3d1c3258968545324a5e02c52c9f1cdf52f0ba5c68bdc1a934482a29402691
+            
+            # ===== LOGGING & MONITORING =====
+            LOG_LEVEL=INFO
+            DEBUG=False
+            LOG_FILE=logs/bot_production.log
+            ERROR_LOG_FILE=logs/error_production.log
+            
+            # ===== PERFORMANCE SETTINGS =====
+            CACHE_TTL=3600
+            CACHE_MAX_SIZE=1000
+            MAX_REQUESTS_PER_MINUTE=60
+            MAX_CONCURRENT_REQUESTS=10
+            
+            # ===== DEPLOYMENT SETTINGS =====
+            PRODUCTION_DOMAIN=188.166.221.59
+            PRODUCTION_PORT=8000
+            HEALTH_CHECK_URL=http://localhost:8080/health
+            
+            # ===== BACKUP SETTINGS =====
+            BACKUP_ENABLED=true
+            BACKUP_INTERVAL=daily
+            BACKUP_RETENTION_DAYS=30
+            BACKUP_PATH=/var/backups/fb_ads_bot
+            EOF
+            
+            echo "✅ .env.prod file created successfully!"
+            
             # Простая проверка здоровья
             echo "✅ Deployment completed successfully!"
 
