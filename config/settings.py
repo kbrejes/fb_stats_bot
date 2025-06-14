@@ -77,10 +77,14 @@ EXPORT_FORMATS: List[str] = ["csv", "json", "excel"]
 DB_PATH = os.getenv("DB_PATH", "facebook_ads_bot.db")
 DB_CONNECTION_STRING = os.getenv('DB_CONNECTION_STRING', 'sqlite:///database.sqlite')
 
-# Security
+# Encryption settings
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
 if not ENCRYPTION_KEY:
-    raise ValueError("ENCRYPTION_KEY is not set in environment variables")
+    if ENVIRONMENT == 'test':
+        # Для тестов используем фиксированный ключ
+        ENCRYPTION_KEY = 'test-encryption-key-32-chars-long'
+    else:
+        raise ValueError("ENCRYPTION_KEY is not set in environment variables")
 
 # OpenAI settings
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
