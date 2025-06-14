@@ -1,0 +1,24 @@
+name: Restart Bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restart Bot
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml up -d
+            sleep 30
+            docker-compose -f docker-compose.prod.yml ps
+            docker logs fb_ads_bot_app --tail=20 
