@@ -19,6 +19,7 @@ from src.bot.analytics_handlers import router as analytics_router
 from src.services.notifications import NotificationService
 from src.utils.logger import setup_logging
 from src.storage.models import NotificationSettings, User
+from src.utils.health_check import start_health_check_server
 
 # Configure logging
 logging.basicConfig(
@@ -88,6 +89,10 @@ async def main():
         init_db()
         logger.info("Database initialized")
         
+        # Start health check server
+        health_runner = await start_health_check_server(port=8080)
+        logger.info("Health check server started on port 8080")
+        
         # Setup notifications
         await setup_notifications()
         logger.info("Notifications setup completed")
@@ -98,6 +103,8 @@ async def main():
     finally:
         logger.info("Shutting down...")
         await NotificationService.shutdown()
+        if 'health_runner' in locals():
+            await health_runner.cleanup()
         await bot.session.close()
         logger.info("Shutdown complete")
 
