@@ -1,0 +1,90 @@
+name: 🔬 Deep Diagnosis
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deep-diagnosis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔬 Deep Server Diagnosis
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            echo "🔬 ГЛУБОКАЯ ДИАГНОСТИКА СЕРВЕРА"
+            echo "================================"
+            
+            echo "📊 СИСТЕМНАЯ ИНФОРМАЦИЯ:"
+            echo "Дата: $(date)"
+            echo "Пользователь: $(whoami)"
+            echo "Домашняя директория: $HOME"
+            echo "Текущая директория: $(pwd)"
+            
+            echo -e "\n💾 ДИСКОВОЕ ПРОСТРАНСТВО:"
+            df -h
+            
+            echo -e "\n🧠 ПАМЯТЬ:"
+            free -h
+            
+            echo -e "\n⚡ ПРОЦЕССЫ:"
+            ps aux | head -10
+            
+            echo -e "\n🌐 СЕТЕВЫЕ ПОДКЛЮЧЕНИЯ:"
+            netstat -tlnp | grep -E ':(22|80|443|8000|8080|5432)'
+            
+            echo -e "\n🐳 DOCKER СТАТУС:"
+            docker --version
+            docker-compose --version
+            docker info | grep -E "(Containers|Images|Server Version)"
+            
+            echo -e "\n📦 DOCKER КОНТЕЙНЕРЫ:"
+            docker ps -a
+            
+            echo -e "\n🖼️ DOCKER ОБРАЗЫ:"
+            docker images
+            
+            echo -e "\n📁 ПОИСК ДИРЕКТОРИЙ ПРОЕКТА:"
+            find /home -name "*fb_ads*" -type d 2>/dev/null || echo "Не найдено в /home"
+            find /root -name "*fb_ads*" -type d 2>/dev/null || echo "Не найдено в /root"
+            find /opt -name "*fb_ads*" -type d 2>/dev/null || echo "Не найдено в /opt"
+            
+            echo -e "\n📂 ПРОВЕРКА ВОЗМОЖНЫХ ДИРЕКТОРИЙ:"
+            for dir in "/home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean" "/root/fb_ads_tg_bot_clean" "/home/root/fb_ads_tg_bot_clean"; do
+              if [ -d "$dir" ]; then
+                echo "✅ Найдена: $dir"
+                ls -la "$dir" | head -10
+                echo "Git статус:"
+                cd "$dir" && git status 2>/dev/null || echo "Не git репозиторий"
+                echo "Docker compose файлы:"
+                ls -la "$dir"/docker-compose* 2>/dev/null || echo "Нет docker-compose файлов"
+                echo "Env файлы:"
+                ls -la "$dir"/.env* 2>/dev/null || echo "Нет .env файлов"
+                echo "---"
+              else
+                echo "❌ Не найдена: $dir"
+              fi
+            done
+            
+            echo -e "\n🔍 ПОИСК DOCKER-COMPOSE ФАЙЛОВ:"
+            find / -name "docker-compose*.yml" -type f 2>/dev/null | head -10
+            
+            echo -e "\n📋 ЛОГИ DOCKER:"
+            docker logs $(docker ps -aq) --tail=5 2>/dev/null || echo "Нет запущенных контейнеров"
+            
+            echo -e "\n🔥 СИСТЕМНЫЕ ЛОГИ (последние ошибки):"
+            journalctl --no-pager -n 20 -p err 2>/dev/null || echo "journalctl недоступен"
+            
+            echo -e "\n🚪 ОТКРЫТЫЕ ПОРТЫ:"
+            ss -tlnp | grep -E ':(22|80|443|8000|8080|5432)' || echo "Нет открытых портов"
+            
+            echo -e "\n🔐 FIREWALL СТАТУС:"
+            ufw status 2>/dev/null || iptables -L -n | head -10 2>/dev/null || echo "Firewall info недоступен"
+            
+            echo -e "\n📊 ЗАГРУЗКА СИСТЕМЫ:"
+            uptime
+            
+            echo -e "\n✅ ДИАГНОСТИКА ЗАВЕРШЕНА" 
