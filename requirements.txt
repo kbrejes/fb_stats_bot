@@ -1,5 +1,5 @@
 aiogram==3.13.1
-facebook-business==21.0.2
+facebook-business==21.0.5
 pandas>=2.0.0
 sqlalchemy==2.0.36
 asyncpg==0.30.0
