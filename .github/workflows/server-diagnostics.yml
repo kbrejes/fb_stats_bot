@@ -1,0 +1,189 @@
+name: 🔍 Server Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      diagnostic_type:
+        description: 'Тип диагностики'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - logs
+          - status
+          - restart
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: 🔍 Диагностика сервера
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Полная диагностика сервера
+        if: github.event.inputs.diagnostic_type == 'full' || github.event.inputs.diagnostic_type == ''
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            echo "🔍 ПОЛНАЯ ДИАГНОСТИКА СЕРВЕРА"
+            echo "=============================="
+            
+            echo "📊 Системная информация:"
+            echo "------------------------"
+            uname -a
+            uptime
+            df -h
+            free -h
+            
+            echo ""
+            echo "🐳 Docker статус:"
+            echo "----------------"
+            docker --version
+            docker-compose --version
+            docker ps -a
+            
+            echo ""
+            echo "📁 Проект:"
+            echo "---------"
+            cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean
+            pwd
+            ls -la
+            
+            echo ""
+            echo "⚙️ Конфигурация:"
+            echo "---------------"
+            ls -la .env* 2>/dev/null || echo "Файлы .env не найдены"
+            echo "Первые 10 строк .env.prod:"
+            head -10 .env.prod 2>/dev/null || echo "Файл .env.prod не найден"
+            
+            echo ""
+            echo "🔧 Docker Compose статус:"
+            echo "------------------------"
+            docker-compose -f docker-compose.prod.yml ps 2>/dev/null || echo "docker-compose.prod.yml не найден"
+            
+            echo ""
+            echo "🌐 Сетевые порты:"
+            echo "----------------"
+            netstat -tlnp | grep -E ':(8000|8080|5432|6379)' || echo "Целевые порты не прослушиваются"
+            
+            echo ""
+            echo "⚡ Процессы:"
+            echo "----------"
+            ps aux | grep -E '(python|docker|postgres|redis)' | grep -v grep || echo "Целевые процессы не найдены"
+
+      - name: 📋 Просмотр логов
+        if: github.event.inputs.diagnostic_type == 'logs' || github.event.inputs.diagnostic_type == 'full'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            echo "📋 ЛОГИ КОНТЕЙНЕРОВ"
+            echo "=================="
+            
+            cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean
+            
+            echo "🤖 Логи бота (последние 30 строк):"
+            echo "-----------------------------------"
+            docker logs fb_ads_bot_app --tail=30 2>/dev/null || echo "Контейнер fb_ads_bot_app не найден"
+            
+            echo ""
+            echo "🗄️ Логи PostgreSQL:"
+            echo "------------------"
+            docker logs fb_ads_bot_postgres --tail=20 2>/dev/null || echo "Контейнер PostgreSQL не найден"
+            
+            echo ""
+            echo "🔴 Логи Redis:"
+            echo "-------------"
+            docker logs fb_ads_bot_redis --tail=10 2>/dev/null || echo "Контейнер Redis не найден"
+            
+            echo ""
+            echo "🌐 Логи Nginx:"
+            echo "-------------"
+            docker logs fb_ads_bot_nginx --tail=10 2>/dev/null || echo "Контейнер Nginx не найден"
+            
+            echo ""
+            echo "📁 Файлы логов:"
+            echo "--------------"
+            ls -la logs/ 2>/dev/null || echo "Директория logs не найдена"
+            
+            if [ -f logs/bot_production.log ]; then
+                echo "Последние 20 строк bot_production.log:"
+                tail -20 logs/bot_production.log
+            fi
+            
+            if [ -f logs/error_production.log ]; then
+                echo "Последние 10 строк error_production.log:"
+                tail -10 logs/error_production.log
+            fi
+
+      - name: 📊 Проверка статуса
+        if: github.event.inputs.diagnostic_type == 'status'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            echo "📊 СТАТУС СЕРВИСОВ"
+            echo "=================="
+            
+            cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean
+            
+            echo "🐳 Docker контейнеры:"
+            docker ps -a
+            
+            echo ""
+            echo "🔧 Docker Compose статус:"
+            docker-compose -f docker-compose.prod.yml ps 2>/dev/null || echo "docker-compose.prod.yml не найден"
+            
+            echo ""
+            echo "🌐 Health checks:"
+            curl -f http://localhost:8080/health 2>/dev/null && echo "✅ Health endpoint работает" || echo "❌ Health endpoint не отвечает"
+            curl -f http://localhost:8000 2>/dev/null && echo "✅ Основной порт работает" || echo "❌ Основной порт не отвечает"
+
+      - name: 🔄 Перезапуск сервисов
+        if: github.event.inputs.diagnostic_type == 'restart'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            echo "🔄 ПЕРЕЗАПУСК СЕРВИСОВ"
+            echo "====================="
+            
+            cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean
+            
+            echo "🛑 Остановка сервисов..."
+            docker-compose -f docker-compose.prod.yml down
+            
+            echo ""
+            echo "🚀 Запуск сервисов..."
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            echo ""
+            echo "⏳ Ожидание запуска (30 секунд)..."
+            sleep 30
+            
+            echo ""
+            echo "📊 Проверка статуса после перезапуска:"
+            docker-compose -f docker-compose.prod.yml ps
+            
+            echo ""
+            echo "🏥 Проверка health endpoint:"
+            curl -f http://localhost:8080/health 2>/dev/null && echo "✅ Health endpoint работает" || echo "❌ Health endpoint не отвечает" 
