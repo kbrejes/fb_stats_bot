@@ -289,4 +289,4 @@ MIT License - см. файл [LICENSE](LICENSE)
 
 ---
 
-**Создано с ❤️ для эффективной работы с Facebook Ads** 
+**Создано с ❤️ для эффективной работы с Facebook Ads** # Trigger deployment
