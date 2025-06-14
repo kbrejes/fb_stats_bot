@@ -1,0 +1,98 @@
+name: 🚀 Quick Bot Restart
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restart:
+    name: 🚀 Быстрый перезапуск бота
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔄 Перезапуск бота
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            echo "🚀 БЫСТРЫЙ ПЕРЕЗАПУСК FACEBOOK ADS BOT"
+            echo "====================================="
+            
+            cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean
+            
+            echo "📁 Текущая директория:"
+            pwd
+            ls -la
+            
+            echo ""
+            echo "📋 Проверка .env.prod файла:"
+            if [ -f .env.prod ]; then
+                echo "✅ .env.prod найден"
+                echo "Первые 5 строк:"
+                head -5 .env.prod
+            else
+                echo "❌ .env.prod не найден, создаем..."
+                cat > .env.prod << 'EOF'
+            ENVIRONMENT=production
+            TELEGRAM_TOKEN=7595294156:AAFcKTYzTt0h0xEt-BiVs-otrmYB6dAL7LY
+            OWNER_ID=400133981
+            OWNER_USERNAME=kbrejes
+            OWNER_FIRST_NAME=Kiryushaa
+            ADMIN_USERS=400133981
+            FB_APP_ID=639419165542707
+            FB_APP_SECRET=73af4e475afddfbd61fb74628481eb28
+            FB_REDIRECT_URI=https://188.166.221.59/api/facebook/callback
+            FB_API_VERSION=v19.0
+            OPENAI_API_KEY=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
+            DB_CONNECTION_STRING=postgresql://fb_ads_user:secure_password_123@localhost:5432/fb_ads_bot_prod
+            DB_PATH=data/bot_production.db
+            ENCRYPTION_KEY=cf3d1c3258968545324a5e02c52c9f1cdf52f0ba5c68bdc1a934482a29402691
+            LOG_LEVEL=INFO
+            DEBUG=False
+            LOG_FILE=logs/bot_production.log
+            ERROR_LOG_FILE=logs/error_production.log
+            PRODUCTION_DOMAIN=188.166.221.59
+            PRODUCTION_PORT=8000
+            HEALTH_CHECK_URL=http://localhost:8080/health
+            EOF
+                echo "✅ .env.prod создан"
+            fi
+            
+            echo ""
+            echo "🛑 Остановка всех контейнеров:"
+            docker-compose -f docker-compose.prod.yml down 2>/dev/null || echo "Контейнеры уже остановлены"
+            
+            echo ""
+            echo "🧹 Очистка Docker:"
+            docker system prune -f
+            
+            echo ""
+            echo "🚀 Запуск сервисов:"
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            echo ""
+            echo "⏳ Ожидание запуска (30 секунд)..."
+            sleep 30
+            
+            echo ""
+            echo "📊 Проверка статуса:"
+            docker-compose -f docker-compose.prod.yml ps
+            
+            echo ""
+            echo "📋 Логи бота (последние 20 строк):"
+            docker logs fb_ads_bot_app --tail=20 2>/dev/null || echo "Контейнер бота не найден"
+            
+            echo ""
+            echo "🏥 Health check:"
+            curl -f http://localhost:8080/health 2>/dev/null && echo "✅ Health endpoint работает" || echo "❌ Health endpoint не отвечает"
+            
+            echo ""
+            echo "✅ Перезапуск завершен!" 
