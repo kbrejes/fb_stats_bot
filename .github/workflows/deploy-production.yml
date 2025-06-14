@@ -286,14 +286,14 @@ jobs:
             
             # ЗАПУСКАЕМ DOCKER КОНТЕЙНЕРЫ
             echo "🐳 Starting Docker containers..."
-            docker-compose -f docker-compose.prod.yml down || true
+            docker-compose -f docker-compose.simple.yml down || true
             docker system prune -f || true
             
             # Создаем необходимые директории
             mkdir -p logs data backups
             
             # Запускаем контейнеры
-            docker-compose -f docker-compose.prod.yml up -d --build
+            docker-compose -f docker-compose.simple.yml up -d --build
             
             # Ждем запуска
             echo "⏳ Waiting for services to start..."
@@ -301,11 +301,11 @@ jobs:
             
             # Проверяем статус
             echo "📊 Checking container status..."
-            docker-compose -f docker-compose.prod.yml ps
+            docker-compose -f docker-compose.simple.yml ps
             
             # Показываем логи
             echo "📋 Application logs:"
-            docker logs fb_ads_bot_app --tail=20 2>/dev/null || docker logs bot --tail=20 2>/dev/null || echo "No logs available"
+            docker logs fb_ads_bot_app --tail=20 2>/dev/null || echo "No logs available"
             
             echo "✅ Deployment completed successfully!"
 
@@ -322,7 +322,7 @@ jobs:
             
             # Проверяем контейнеры
             echo "📊 Container status:"
-            docker-compose -f docker-compose.prod.yml ps
+            docker-compose -f docker-compose.simple.yml ps
             
             # Проверяем health endpoint
             echo "🏥 Health check:"
@@ -331,7 +331,7 @@ jobs:
             
             # Показываем логи
             echo "📋 Application logs:"
-            docker logs fb_ads_bot_app --tail=20 2>/dev/null || docker logs bot --tail=20 2>/dev/null || echo "No logs available"
+            docker logs fb_ads_bot_app --tail=20 2>/dev/null || echo "No logs available"
             
             echo "📁 Files are in place!"
 

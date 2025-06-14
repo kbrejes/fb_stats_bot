@@ -64,7 +64,7 @@ jobs:
             
             # Запускаем только основные сервисы
             echo "🚀 Запускаем основные сервисы..."
-            docker-compose -f docker-compose.prod.yml up -d postgres redis bot
+            docker-compose -f docker-compose.simple.yml up -d --build
             
             echo "⏳ Ждем запуска (60 секунд)..."
             sleep 60
@@ -73,7 +73,7 @@ jobs:
             docker ps
             
             echo "📋 Логи бота:"
-            docker logs fb_ads_bot_app --tail=30 2>/dev/null || docker logs bot --tail=30 2>/dev/null || echo "Логи недоступны"
+            docker logs fb_ads_bot_app --tail=30 2>/dev/null || echo "Логи недоступны"
             
             echo "🏥 Проверка health:"
             curl -f http://localhost:8080/health 2>/dev/null && echo "✅ Health OK" || echo "❌ Health failed"
