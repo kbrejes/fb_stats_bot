@@ -1,0 +1,81 @@
+name: 🚨 Emergency Fix
+
+on:
+  workflow_dispatch:
+
+jobs:
+  emergency-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚨 Emergency Bot Fix
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            echo "🚨 ЭКСТРЕННОЕ ИСПРАВЛЕНИЕ БОТА"
+            
+            # Переходим в правильную директорию
+            cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean 2>/dev/null || cd /root/fb_ads_tg_bot_clean 2>/dev/null || {
+              echo "❌ Директория не найдена, создаем..."
+              mkdir -p /root/fb_ads_tg_bot_clean
+              cd /root/fb_ads_tg_bot_clean
+              git clone https://github.com/kbrejes/fb_stats_bot.git .
+            }
+            
+            echo "📁 Текущая директория: $(pwd)"
+            
+            # Останавливаем все
+            echo "🛑 Останавливаем все контейнеры..."
+            docker stop $(docker ps -aq) 2>/dev/null || true
+            docker rm $(docker ps -aq) 2>/dev/null || true
+            docker system prune -af
+            
+            # Обновляем код
+            echo "🔄 Обновляем код..."
+            git fetch origin
+            git reset --hard origin/production
+            
+            # Создаем .env.prod
+            echo "📝 Создаем .env.prod..."
+            cat > .env.prod << 'EOF'
+            ENVIRONMENT=production
+            TELEGRAM_TOKEN=7595294156:AAFcKTYzTt0h0xEt-BiVs-otrmYB6dAL7LY
+            OWNER_ID=400133981
+            OWNER_USERNAME=kbrejes
+            OWNER_FIRST_NAME=Kiryushaa
+            ADMIN_USERS=400133981
+            FB_APP_ID=639419165542707
+            FB_APP_SECRET=73af4e475afddfbd61fb74628481eb28
+            FB_REDIRECT_URI=https://188.166.221.59/api/facebook/callback
+            FB_API_VERSION=v19.0
+            OPENAI_API_KEY=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
+            ENCRYPTION_KEY=cf3d1c3258968545324a5e02c52c9f1cdf52f0ba5c68bdc1a934482a29402691
+            DB_CONNECTION_STRING=postgresql://fb_ads_user:secure_password_123@localhost:5432/fb_ads_bot_prod
+            LOG_LEVEL=INFO
+            DEBUG=False
+            EOF
+            
+            # Создаем директории
+            echo "📁 Создаем директории..."
+            mkdir -p logs data backups
+            
+            # Запускаем только основные сервисы
+            echo "🚀 Запускаем основные сервисы..."
+            docker-compose -f docker-compose.prod.yml up -d postgres redis bot
+            
+            echo "⏳ Ждем запуска (60 секунд)..."
+            sleep 60
+            
+            echo "📊 Статус контейнеров:"
+            docker ps
+            
+            echo "📋 Логи бота:"
+            docker logs fb_ads_bot_app --tail=30 2>/dev/null || docker logs bot --tail=30 2>/dev/null || echo "Логи недоступны"
+            
+            echo "🏥 Проверка health:"
+            curl -f http://localhost:8080/health 2>/dev/null && echo "✅ Health OK" || echo "❌ Health failed"
+            
+            echo "✅ ЭКСТРЕННОЕ ИСПРАВЛЕНИЕ ЗАВЕРШЕНО!" 
