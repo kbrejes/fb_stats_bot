@@ -1,0 +1,85 @@
+name: 🔧 Fix Bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔧 Fix Bot on Server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            echo "🔍 Диагностика проблемы..."
+            
+            cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean || cd /root/fb_ads_tg_bot_clean
+            
+            echo "📁 Текущая директория:"
+            pwd
+            ls -la
+            
+            echo "🐳 Статус Docker:"
+            docker --version
+            docker-compose --version
+            
+            echo "📊 Текущие контейнеры:"
+            docker ps -a
+            
+            echo "🔍 Проверяем docker-compose файлы:"
+            ls -la docker-compose*
+            
+            echo "🔧 Останавливаем все контейнеры:"
+            docker stop $(docker ps -aq) 2>/dev/null || true
+            docker rm $(docker ps -aq) 2>/dev/null || true
+            
+            echo "🧹 Очищаем Docker:"
+            docker system prune -f
+            
+            echo "📋 Проверяем .env.prod:"
+            if [ -f ".env.prod" ]; then
+              echo "✅ .env.prod существует"
+              head -5 .env.prod
+            else
+              echo "❌ .env.prod не найден, создаем..."
+              cat > .env.prod << 'EOF'
+            ENVIRONMENT=production
+            TELEGRAM_TOKEN=7595294156:AAFcKTYzTt0h0xEt-BiVs-otrmYB6dAL7LY
+            OWNER_ID=400133981
+            FB_APP_ID=639419165542707
+            FB_APP_SECRET=73af4e475afddfbd61fb74628481eb28
+            FB_REDIRECT_URI=https://188.166.221.59/api/facebook/callback
+            OPENAI_API_KEY=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
+            ENCRYPTION_KEY=cf3d1c3258968545324a5e02c52c9f1cdf52f0ba5c68bdc1a934482a29402691
+            DB_CONNECTION_STRING=postgresql://fb_ads_user:secure_password_123@localhost:5432/fb_ads_bot_prod
+            LOG_LEVEL=INFO
+            EOF
+            fi
+            
+            echo "🚀 Запускаем контейнеры:"
+            if [ -f "docker-compose.prod.yml" ]; then
+              docker-compose -f docker-compose.prod.yml up -d
+            elif [ -f "docker-compose.yml" ]; then
+              docker-compose up -d
+            else
+              echo "❌ Не найден docker-compose файл!"
+              exit 1
+            fi
+            
+            echo "⏳ Ждем запуска (30 сек)..."
+            sleep 30
+            
+            echo "📊 Финальный статус:"
+            docker ps
+            
+            echo "📋 Логи приложения:"
+            docker logs $(docker ps --format "table {{.Names}}" | grep -E "(app|bot)" | head -1) --tail=20 2>/dev/null || echo "Логи недоступны"
+            
+            echo "🏥 Проверка health:"
+            curl -f http://localhost:8080/health || echo "Health endpoint недоступен"
+            
+            echo "✅ Диагностика завершена!" 
