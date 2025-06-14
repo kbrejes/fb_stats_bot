@@ -55,7 +55,7 @@ def db_session():
     engine = create_engine("sqlite:///:memory:")
     Session = sessionmaker(bind=engine)
     session = Session()
-    
+
     # Mock the session to avoid actual database operations
     session = MagicMock()
     session.query.return_value = session
@@ -66,7 +66,7 @@ def db_session():
     session.add = MagicMock()
     session.commit = MagicMock()
     session.close = MagicMock()
-    
+
     yield session
     session.close()
 
@@ -118,14 +118,17 @@ def mock_facebook_api():
 def mock_fb_client():
     """Mock Facebook Ads Client."""
     client = AsyncMock()
-    client.get_accounts.return_value = ([
-        {
-            "id": "act_123",
-            "name": "Test Account",
-            "currency": "USD",
-            "timezone_name": "UTC"
-        }
-    ], None)
+    client.get_accounts.return_value = (
+        [
+            {
+                "id": "act_123",
+                "name": "Test Account",
+                "currency": "USD",
+                "timezone_name": "UTC",
+            }
+        ],
+        None,
+    )
     client.get_account_insights.return_value = [
         {
             "account_id": "123456789",
@@ -133,22 +136,18 @@ def mock_fb_client():
             "impressions": "1000",
             "clicks": "50",
             "date_start": "2024-02-01",
-            "date_stop": "2024-02-07"
+            "date_stop": "2024-02-07",
         }
     ]
     client.get_campaigns.return_value = [
-        {
-            "id": "campaign_123",
-            "name": "Test Campaign",
-            "status": "ACTIVE"
-        }
+        {"id": "campaign_123", "name": "Test Campaign", "status": "ACTIVE"}
     ]
     client.get_campaign_insights.return_value = [
         {
             "campaign_id": "campaign_123",
             "spend": "50.00",
             "impressions": "500",
-            "clicks": "25"
+            "clicks": "25",
         }
     ]
     return client
@@ -160,12 +159,14 @@ def setup_test_env():
     # Set test environment variables
     test_env = {
         "ENVIRONMENT": "test",
-        "TELEGRAM_TOKEN": "test_token",
+        "TELEGRAM_TOKEN": "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz123456789",
+        "BOT_TOKEN": "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz123456789",
         "OPENAI_API_KEY": "test_openai_key",
         "FB_APP_ID": "test_fb_app_id",
         "FB_APP_SECRET": "test_fb_secret",
         "DB_CONNECTION_STRING": "sqlite:///test.db",
         "LOG_LEVEL": "DEBUG",
+        "ENCRYPTION_KEY": "test_encryption_key_32_characters_long",
     }
 
     original_env = {}

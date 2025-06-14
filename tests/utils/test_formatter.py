@@ -2,8 +2,9 @@
 Tests for message formatter utilities.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.utils.message_formatter import format_insights
 
@@ -38,21 +39,21 @@ def sample_insights():
 def test_format_insights_basic(sample_insights):
     """Test basic formatting of insights data."""
     result = format_insights(sample_insights, "account", "yesterday")
-    
+
     # Проверяем что результат не пустой
     assert result is not None
     assert len(result) > 0
-    
+
     # Проверяем что в результате есть основные метрики (форматированные)
     assert "1,000" in result  # impressions (с запятой)
     assert "100.00" in result  # spend
-    assert "50" in result      # clicks
+    assert "50" in result  # clicks
 
 
 def test_format_insights_empty_data():
     """Test formatting with empty insights data."""
     result = format_insights([], "account", "yesterday")
-    
+
     # Для пустых данных возвращается сообщение об отсутствии данных
     assert result is not None
     assert "❌ Статистика не найдена" in result
@@ -61,7 +62,7 @@ def test_format_insights_empty_data():
 def test_format_insights_different_object_types(sample_insights):
     """Test formatting for different object types."""
     object_types = ["account", "campaign", "adset", "ad"]
-    
+
     for obj_type in object_types:
         result = format_insights(sample_insights, obj_type, "yesterday")
         assert result is not None

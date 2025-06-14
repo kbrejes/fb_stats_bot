@@ -22,9 +22,9 @@ else:
     print(f"Running in {ENVIRONMENT} environment with default .env")
 
 # Bot settings
-BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+BOT_TOKEN = os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN")
 if not BOT_TOKEN and ENVIRONMENT == 'test':
-    BOT_TOKEN = 'test-bot-token:test'
+    BOT_TOKEN = '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz123456789'  # Валидный формат для тестов
 BOT_ID = 8113924050  # ID of the bot
 
 # Owner settings

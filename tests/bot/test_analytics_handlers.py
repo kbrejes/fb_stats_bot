@@ -101,24 +101,14 @@ async def test_handle_analytics_callback_invalid(callback_query):
 async def test_handle_period_selection(callback_query, sample_account):
     callback_query.data = "period:daily"
 
-    with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client, patch(
-        "src.bot.analytics_handlers.get_session"
-    ) as mock_get_session:
-        # Мокаем базу данных
-        mock_session = MagicMock()
-        mock_user = MagicMock()
-        mock_user.fb_access_token = "test_token"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_user
-        mock_get_session.return_value.__enter__.return_value = mock_session
-
-        mock_instance = AsyncMock()
-        mock_instance.get_ad_accounts.return_value = [sample_account]
-        mock_fb_client.return_value = mock_instance
+    with patch("src.bot.analytics_handlers.get_accounts") as mock_get_accounts:
+        # Мокаем get_accounts из finite_state_machine
+        mock_get_accounts.return_value = [sample_account]
 
         await handle_period_selection(callback_query)
 
-        # Проверяем вызов API
-        mock_instance.get_ad_accounts.assert_called_once()
+        # Проверяем вызов get_accounts
+        mock_get_accounts.assert_called_once()
 
         # Проверяем сообщение
         callback_query.message.edit_text.assert_called_once()
@@ -134,19 +124,9 @@ async def test_handle_period_selection(callback_query, sample_account):
 async def test_handle_period_selection_no_accounts(callback_query):
     callback_query.data = "period:daily"
 
-    with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client, patch(
-        "src.bot.analytics_handlers.get_session"
-    ) as mock_get_session:
-        # Мокаем базу данных
-        mock_session = MagicMock()
-        mock_user = MagicMock()
-        mock_user.fb_access_token = "test_token"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_user
-        mock_get_session.return_value.__enter__.return_value = mock_session
-
-        mock_instance = AsyncMock()
-        mock_instance.get_ad_accounts.return_value = []
-        mock_fb_client.return_value = mock_instance
+    with patch("src.bot.analytics_handlers.get_accounts") as mock_get_accounts:
+        # Мокаем get_accounts чтобы вернуть пустой список
+        mock_get_accounts.return_value = []
 
         await handle_period_selection(callback_query)
 
@@ -160,63 +140,44 @@ async def test_handle_period_selection_no_accounts(callback_query):
 async def test_handle_comparison(callback_query, sample_account):
     callback_query.data = f"compare:daily:{sample_account['id']}"
 
-    with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client, patch(
+    with patch("src.bot.analytics_handlers.get_accounts") as mock_get_accounts, patch(
         "src.bot.analytics_handlers.analytics_service"
-    ) as mock_analytics, patch(
-        "src.bot.analytics_handlers.DataProcessor"
-    ) as mock_processor, patch(
-        "src.bot.analytics_handlers.get_session"
-    ) as mock_get_session:
-
-        # Мокаем базу данных
-        mock_session = MagicMock()
-        mock_user = MagicMock()
-        mock_user.fb_access_token = "test_token"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_user
-        mock_get_session.return_value.__enter__.return_value = mock_session
+    ) as mock_analytics:
 
         # Настраиваем моки
-        mock_fb_client_instance = AsyncMock()
-        mock_fb_client_instance.get_ad_accounts.return_value = [sample_account]
-        mock_fb_client.return_value = mock_fb_client_instance
-
-        mock_analytics.get_comparative_insights = AsyncMock(return_value=([], []))
-        mock_processor.format_comparative_insights.return_value = "Test comparison"
+        mock_get_accounts.return_value = [sample_account]
+        mock_analytics.get_comprehensive_analysis = AsyncMock(
+            return_value="Test comprehensive analysis"
+        )
 
         await handle_comparison(callback_query)
 
         # Проверяем вызовы
-        mock_analytics.get_comparative_insights.assert_called_once()
-        mock_processor.format_comparative_insights.assert_called_once()
+        mock_get_accounts.assert_called_once()
+        mock_analytics.get_comprehensive_analysis.assert_called_once()
 
         # Проверяем сообщение
         callback_query.message.edit_text.assert_called_once()
-        assert callback_query.message.edit_text.call_args[0][0] == "Test comparison"
+        call_args = callback_query.message.edit_text.call_args[0]
+        assert "Test comprehensive analysis" in call_args[0]
 
 
 @pytest.mark.asyncio
 async def test_handle_analysis(callback_query, sample_account):
     callback_query.data = f"analyze:daily:{sample_account['id']}"
 
-    with patch("src.bot.analytics_handlers.FacebookAdsClient") as mock_fb_client, patch(
+    with patch("src.bot.analytics_handlers.get_accounts") as mock_get_accounts, patch(
         "src.bot.analytics_handlers.analytics_service"
-    ) as mock_analytics, patch(
-        "src.bot.analytics_handlers.get_session"
-    ) as mock_get_session:
-
-        # Мокаем базу данных
-        mock_session = MagicMock()
-        mock_user = MagicMock()
-        mock_user.fb_access_token = "test_token"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_user
-        mock_get_session.return_value.__enter__.return_value = mock_session
+    ) as mock_analytics:
 
         # Настраиваем моки
-        mock_fb_client_instance = AsyncMock()
-        mock_fb_client_instance.get_ad_accounts.return_value = [sample_account]
-        mock_fb_client.return_value = mock_fb_client_instance
+        mock_get_accounts.return_value = [sample_account]
 
-        mock_analytics.get_comparative_insights = AsyncMock(return_value=([], []))
+        # Мокаем непустые данные для insights, чтобы пройти проверку активности
+        sample_insights = [{"spend": "100.00", "impressions": "1000"}]
+        mock_analytics.get_comparative_insights = AsyncMock(
+            return_value=(sample_insights, sample_insights)
+        )
         mock_analytics.analyze_insights = AsyncMock(return_value="Test analysis")
 
         await handle_analysis(callback_query)
