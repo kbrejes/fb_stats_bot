@@ -24,6 +24,12 @@ on:
         type: boolean
         default: false
 
+# Добавляем разрешения для GitHub token
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -163,7 +169,7 @@ jobs:
     name: 🚀 Deploy to Staging
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref != 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    if: github.ref != 'refs/heads/production' || github.event.inputs.environment == 'staging'
     environment: staging
 
     steps:
@@ -193,7 +199,7 @@ jobs:
     name: 🌟 Deploy to Production
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event.inputs.environment != 'staging'
+    if: github.ref == 'refs/heads/production' && github.event.inputs.environment != 'staging'
     environment: production
 
     steps:
@@ -222,7 +228,7 @@ jobs:
             cd /home/${{ secrets.PROD_USER }}/fb_ads_tg_bot_clean
             
             # Pull latest changes
-            git pull origin main
+            git pull origin production
             
             # Update with zero downtime
             docker-compose -f docker-compose.prod.yml pull
