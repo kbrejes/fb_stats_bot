@@ -1,9 +1,10 @@
 """
 Telegram bot module for the Facebook Ads Telegram Bot.
 """
+
 from aiogram import Bot, Dispatcher, Router
+from aiogram.client.bot import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config.settings import BOT_TOKEN
@@ -17,4 +18,4 @@ dp = Dispatcher(storage=storage)
 main_router = Router(name="main_router")
 
 # Export bot, dispatcher and main router
-__all__ = ["bot", "dp", "main_router"] 
+__all__ = ["bot", "dp", "main_router"]

@@ -2,8 +2,10 @@
 Language manager for the Telegram bot.
 Handles translations and language settings.
 """
-from typing import Dict, Any, Optional
+
 import logging
+from typing import Any, Dict, Optional
+
 from src.storage.database import get_session
 from src.storage.models import User
 
@@ -32,7 +34,6 @@ translations = {
         "view_campaigns": "👁 Просмотр кампаний",
         "export_account_data": "📤 Экспорт данных",
         "account_menu": "Меню аккаунта",
-        
         # Insights
         "insights_for": "📊 Статистика для {type}: <b>{name}</b>",
         "period": "Период",
@@ -50,14 +51,12 @@ translations = {
         "est_cost": "Примерная стоимость",
         "all_conversions": "Все конверсии",
         "export_note": "Используйте кнопки экспорта ниже для скачивания данных в разных форматах.",
-        
         # Object types
         "account": "аккаунта",
         "campaign": "кампании",
         "adset": "группы объявлений",
         "ad": "объявления",
         "account_campaigns": "кампаний аккаунта",
-        
         # Date presets
         "today": "Сегодня",
         "yesterday": "Вчера",
@@ -67,14 +66,13 @@ translations = {
         "last_30d": "Последние 30 дней",
         "this_month": "Текущий месяц",
         "last_month": "Прошлый месяц",
-        
         # Conversion types
         "link_clicks": "Клики по ссылкам",
         "landing_page_view": "Просмотры целевой страницы",
         "lead": "Лиды",
         "purchase": "Покупки",
         "offsite_conversion.fb_pixel_lead": "Лиды (пиксель)",
-        "offsite_conversion.fb_pixel_purchase": "Покупки (пиксель)"
+        "offsite_conversion.fb_pixel_purchase": "Покупки (пиксель)",
     },
     "en": {
         # General
@@ -90,7 +88,6 @@ translations = {
         "view_campaigns": "👁 View campaigns",
         "export_account_data": "📤 Export data",
         "account_menu": "Account menu",
-        
         # Insights
         "insights_for": "📊 Insights for {type}: <b>{name}</b>",
         "period": "Period",
@@ -108,14 +105,12 @@ translations = {
         "est_cost": "Est. Cost",
         "all_conversions": "All Conversions",
         "export_note": "Use the export buttons below to download this data in different formats.",
-        
         # Object types
         "account": "account",
         "campaign": "campaign",
         "adset": "ad set",
         "ad": "ad",
         "account_campaigns": "account campaigns",
-        
         # Date presets
         "today": "Today",
         "yesterday": "Yesterday",
@@ -125,36 +120,36 @@ translations = {
         "last_30d": "Last 30 days",
         "this_month": "This month",
         "last_month": "Last month",
-        
         # Conversion types
         "link_clicks": "Link Clicks",
         "landing_page_view": "Landing Page Views",
         "lead": "Leads",
         "purchase": "Purchases",
         "offsite_conversion.fb_pixel_lead": "Pixel Leads",
-        "offsite_conversion.fb_pixel_purchase": "Pixel Purchases"
-    }
+        "offsite_conversion.fb_pixel_purchase": "Pixel Purchases",
+    },
 }
+
 
 def get_language(user_id: int) -> str:
     """
     Get the user's preferred language.
-    
+
     Args:
         user_id: The user's Telegram ID.
-        
+
     Returns:
         The user's language code ('ru' or 'en').
     """
     # Check cache first
     if user_id in _user_languages:
         return _user_languages[user_id]
-    
+
     # Try to get from database
     session = get_session()
     try:
         user = session.query(User).filter_by(telegram_id=user_id).first()
-        if user and hasattr(user, 'language'):
+        if user and hasattr(user, "language"):
             lang = user.language
             # Cache the result
             _user_languages[user_id] = lang
@@ -163,27 +158,28 @@ def get_language(user_id: int) -> str:
         logger.error(f"Error getting user language: {str(e)}")
     finally:
         session.close()
-    
+
     # Default to Russian
     return DEFAULT_LANGUAGE
+
 
 def set_language(user_id: int, language: str) -> bool:
     """
     Set the user's preferred language.
-    
+
     Args:
         user_id: The user's Telegram ID.
         language: The language code ('ru' or 'en').
-        
+
     Returns:
         True if successful, False otherwise.
     """
     if language not in SUPPORTED_LANGUAGES:
         return False
-    
+
     # Update cache
     _user_languages[user_id] = language
-    
+
     # Update database
     session = get_session()
     try:
@@ -197,27 +193,28 @@ def set_language(user_id: int, language: str) -> bool:
         session.rollback()
     finally:
         session.close()
-    
+
     return False
+
 
 def get_text(key: str, language: str, **kwargs) -> str:
     """
     Get translated text for a key.
-    
+
     Args:
         key: The translation key.
         language: The language code.
         **kwargs: Formatting arguments.
-        
+
     Returns:
         The translated text.
     """
     if language not in SUPPORTED_LANGUAGES:
         language = DEFAULT_LANGUAGE
-    
+
     lang_dict = translations.get(language, translations[DEFAULT_LANGUAGE])
     text = lang_dict.get(key, translations[DEFAULT_LANGUAGE].get(key, key))
-    
+
     # Apply formatting if kwargs provided
     if kwargs:
         try:
@@ -225,17 +222,18 @@ def get_text(key: str, language: str, **kwargs) -> str:
         except (KeyError, ValueError):
             logger.error(f"Error formatting text for key {key} with args {kwargs}")
             return text
-    
+
     return text
+
 
 # Функция для исправления ID пользователя
 def fix_user_id(user_id: int) -> int:
     """
     Fix user ID for the bot ID issue.
-    
+
     Args:
         user_id: The Telegram user ID.
-        
+
     Returns:
         Fixed user ID.
     """
@@ -250,5 +248,5 @@ def fix_user_id(user_id: int) -> int:
             logger.error(f"Error finding alternative user: {str(e)}")
         finally:
             session.close()
-    
-    return user_id 
+
+    return user_id

@@ -1,3 +1,3 @@
 """
 Bot tests package
-""" 
+"""

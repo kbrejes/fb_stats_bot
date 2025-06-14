@@ -23,6 +23,8 @@ else:
 
 # Bot settings
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not BOT_TOKEN and ENVIRONMENT == 'test':
+    BOT_TOKEN = 'test-bot-token:test'
 BOT_ID = 8113924050  # ID of the bot
 
 # Owner settings
@@ -89,7 +91,11 @@ if not ENCRYPTION_KEY:
 # OpenAI settings
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY is not set in environment variables")
+    if ENVIRONMENT == 'test':
+        # Для тестов используем фиксированный ключ
+        OPENAI_API_KEY = 'test-openai-key'
+    else:
+        raise ValueError("OPENAI_API_KEY is not set in environment variables")
 
 # Logging settings
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
