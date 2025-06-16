@@ -1,0 +1,44 @@
+name: Deploy Telegram Bot
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests
+      run: npm test
+
+    - name: Deploy to Digital Ocean
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.DO_HOST }}
+        username: ${{ secrets.DO_USERNAME }}
+        key: ${{ secrets.DO_SSH_KEY }}
+        script: |
+          cd /opt/telegram-bot
+          git pull origin main
+          echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > .env
+          echo "NODE_ENV=production" >> .env
+          docker-compose down
+          docker-compose build
+          docker-compose up -d
+          docker system prune -f 

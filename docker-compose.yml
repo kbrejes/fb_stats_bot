@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  telegram-bot:
+    build: .
+    container_name: telegram-bot-cicd
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - BOT_TOKEN=${BOT_TOKEN}
+    # Добавляем labels для возможного мониторинга
+    labels:
+      - "traefik.enable=false"
+    # Ограничиваем ресурсы
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25' 
